@@ -45,28 +45,17 @@ export class SpacetimeDBClient {
     async connect() {
         console.log('[STDB] Connecting to:', this.baseUrl);
         
-        try {
-            // Load stored identity/token
-            this.identity = localStorage.getItem(this.storageKeys.identity);
-            this.token = localStorage.getItem(this.storageKeys.token);
-            
-            // Verify connection by querying the database
-            await this.sql('SELECT 1');
-            
-            console.log('[STDB] Connected. Identity:', this.identity || '(anonymous)');
-            
-            if (this.onConnect) {
-                this.onConnect();
-            }
-            
-            return true;
-        } catch (error) {
-            console.error('[STDB] Connection failed:', error);
-            if (this.onError) {
-                this.onError(error);
-            }
-            throw error;
+        // Load stored identity/token from local storage
+        this.identity = localStorage.getItem(this.storageKeys.identity);
+        this.token = localStorage.getItem(this.storageKeys.token);
+        
+        console.log('[STDB] Ready. Identity:', this.identity || '(anonymous)');
+        
+        if (this.onConnect) {
+            this.onConnect();
         }
+        
+        return true;
     }
     
     /**
