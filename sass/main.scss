@@ -4,17 +4,24 @@
 // Variables
 $color-bg: #0a0a0f;
 $color-surface: #12121a;
+$color-surface-elevated: #1a1a24;
 $color-border: #2a2a3a;
+$color-border-hover: #3a3a4a;
 $color-text: #e8e6e3;
 $color-text-muted: #8a8a9a;
 $color-accent: #c9a227;
 $color-accent-hover: #e6b82e;
+$color-accent-glow: rgba(201, 162, 39, 0.15);
+$color-error: #b35252;
+$color-success: #4a9e6a;
 
 $font-display: 'Cormorant Garamond', Georgia, serif;
 $font-mono: 'Fira Code', 'Consolas', monospace;
 
 $radius: 2px;
+$radius-lg: 4px;
 $transition: 0.2s ease;
+$transition-slow: 0.4s ease;
 
 // Reset
 *,
@@ -55,7 +62,7 @@ body {
 
 .welcome__container {
     width: 100%;
-    max-width: 320px;
+    max-width: 380px;
     text-align: center;
 }
 
@@ -81,7 +88,37 @@ body {
     }
 }
 
+// =============================================================================
+// Step Transitions
+// =============================================================================
+
+.step {
+    display: none;
+    opacity: 0;
+    transform: translateY(10px);
+    animation: none;
+    
+    &.step--active {
+        display: block;
+        animation: stepIn $transition-slow forwards;
+    }
+}
+
+@keyframes stepIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+// =============================================================================
 // Login Form
+// =============================================================================
+
 .login-form {
     display: flex;
     flex-direction: column;
@@ -112,14 +149,27 @@ body {
     border: 1px solid $color-border;
     border-radius: $radius;
     outline: none;
-    transition: border-color $transition;
+    transition: border-color $transition, box-shadow $transition;
 
     &:focus {
         border-color: $color-accent;
+        box-shadow: 0 0 0 3px $color-accent-glow;
     }
 
     &::placeholder {
         color: $color-text-muted;
+    }
+}
+
+.login-form__error {
+    font-size: 0.75rem;
+    color: $color-error;
+    min-height: 1.2em;
+    opacity: 0;
+    transition: opacity $transition;
+    
+    &.login-form__error--visible {
+        opacity: 1;
     }
 }
 
@@ -136,14 +186,370 @@ body {
     border: none;
     border-radius: $radius;
     cursor: pointer;
-    transition: background-color $transition, transform $transition;
+    transition: background-color $transition, transform $transition, opacity $transition;
+    position: relative;
 
-    &:hover {
+    .btn-text,
+    .btn-loading {
+        transition: opacity $transition;
+    }
+    
+    .btn-loading {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+    }
+    
+    &.btn--loading {
+        .btn-text {
+            opacity: 0;
+        }
+        .btn-loading {
+            opacity: 1;
+        }
+    }
+
+    &:hover:not(:disabled) {
         background-color: $color-accent-hover;
     }
 
+    &:active:not(:disabled) {
+        transform: scale(0.98);
+    }
+    
+    &:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+}
+
+// =============================================================================
+// Player Greeting
+// =============================================================================
+
+.player-greeting {
+    margin-bottom: 2rem;
+    
+    .greeting__welcome {
+        display: block;
+        font-size: 0.625rem;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        color: $color-text-muted;
+        margin-bottom: 0.25rem;
+    }
+    
+    .greeting__name {
+        display: block;
+        font-family: $font-display;
+        font-size: 1.75rem;
+        color: $color-accent;
+        letter-spacing: 0.05em;
+    }
+}
+
+// =============================================================================
+// Room Options
+// =============================================================================
+
+.room-options {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.room-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1.5rem 2rem;
+    background-color: $color-surface;
+    border: 1px solid $color-border;
+    border-radius: $radius-lg;
+    cursor: pointer;
+    transition: all $transition;
+    
+    &:hover {
+        border-color: $color-accent;
+        background-color: $color-surface-elevated;
+        box-shadow: 0 0 20px $color-accent-glow;
+    }
+    
     &:active {
         transform: scale(0.98);
     }
 }
 
+.room-option__icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.room-option__title {
+    font-family: $font-display;
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: $color-text;
+}
+
+.room-option__desc {
+    font-size: 0.625rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+}
+
+.room-divider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    color: $color-text-muted;
+    font-size: 0.625rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    
+    &::before,
+    &::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, $color-border, transparent);
+    }
+}
+
+// =============================================================================
+// Join Form
+// =============================================================================
+
+.join-form {
+    padding: 1.5rem;
+    background-color: $color-surface;
+    border: 1px solid $color-border;
+    border-radius: $radius-lg;
+    transition: border-color $transition;
+    
+    &:focus-within {
+        border-color: $color-accent;
+    }
+}
+
+.join-form__header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.join-form__field {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.join-form__input {
+    flex: 1;
+    text-align: center;
+    font-size: 1.125rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+}
+
+.join-form__submit {
+    padding: 0.875rem 1.25rem;
+    font-size: 1.25rem;
+    color: $color-bg;
+    background-color: $color-accent;
+    border: none;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: background-color $transition, transform $transition;
+    
+    &:hover:not(:disabled) {
+        background-color: $color-accent-hover;
+    }
+    
+    &:active:not(:disabled) {
+        transform: scale(0.95);
+    }
+    
+    &:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+}
+
+// =============================================================================
+// Role Selection
+// =============================================================================
+
+.role-header {
+    margin-bottom: 2rem;
+}
+
+.role-header__room {
+    display: block;
+    font-family: $font-mono;
+    font-size: 0.875rem;
+    letter-spacing: 0.15em;
+    color: $color-accent;
+    margin-bottom: 0.5rem;
+}
+
+.role-header__label {
+    font-size: 0.625rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+}
+
+.role-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+.role-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 1.25rem 1rem;
+    background-color: $color-surface;
+    border: 1px solid $color-border;
+    border-radius: $radius-lg;
+    cursor: pointer;
+    transition: all $transition;
+    position: relative;
+    overflow: hidden;
+    
+    &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at center, $color-accent-glow 0%, transparent 70%);
+        opacity: 0;
+        transition: opacity $transition;
+    }
+    
+    &:hover {
+        border-color: $color-border-hover;
+        background-color: $color-surface-elevated;
+        
+        &::before {
+            opacity: 0.5;
+        }
+    }
+    
+    &.role-card--selected {
+        border-color: $color-accent;
+        
+        &::before {
+            opacity: 1;
+        }
+    }
+    
+    &.role-card--loading {
+        pointer-events: none;
+        
+        &::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-color: rgba($color-bg, 0.7);
+        }
+    }
+}
+
+.role-card__icon {
+    font-size: 1.5rem;
+    position: relative;
+    z-index: 1;
+}
+
+.role-card__name {
+    font-family: $font-display;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: $color-text;
+    position: relative;
+    z-index: 1;
+}
+
+.role-card__desc {
+    font-size: 0.5625rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+    position: relative;
+    z-index: 1;
+}
+
+// =============================================================================
+// Connection Status
+// =============================================================================
+
+.connection-status {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background-color: $color-surface;
+    border: 1px solid $color-border;
+    border-radius: 2rem;
+    font-size: 0.625rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+    opacity: 0.7;
+    transition: opacity $transition;
+    
+    &:hover {
+        opacity: 1;
+    }
+}
+
+.connection-status__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: $color-text-muted;
+    transition: background-color $transition;
+    
+    .connection-status--connected & {
+        background-color: $color-success;
+        box-shadow: 0 0 6px $color-success;
+    }
+    
+    .connection-status--disconnected & {
+        background-color: $color-error;
+    }
+}
+
+// =============================================================================
+// Responsive
+// =============================================================================
+
+@media (max-width: 480px) {
+    .welcome__title {
+        font-size: 2.25rem;
+        letter-spacing: 0.1em;
+    }
+    
+    .role-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .welcome__container {
+        max-width: 100%;
+    }
+}

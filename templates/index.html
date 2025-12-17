@@ -8,34 +8,113 @@
         <h1 class="welcome__title">{{ config.title }}</h1>
         <p class="welcome__tagline">{{ section.content | safe }}</p>
         
-        <form class="login-form" action="#" method="post">
-            <div class="login-form__field">
-                <label for="username" class="login-form__label">Username</label>
-                <input 
-                    type="text" 
-                    id="username" 
-                    name="username" 
-                    class="login-form__input"
-                    required
-                    autocomplete="username"
-                >
+        <!-- Step 1: Login/Register -->
+        <section id="step-login" class="step step--active">
+            <form class="login-form" id="login-form">
+                <div class="login-form__field">
+                    <label for="username" class="login-form__label">Choose Your Name</label>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        name="username" 
+                        class="login-form__input"
+                        placeholder="Enter username..."
+                        required
+                        autocomplete="username"
+                        minlength="2"
+                        maxlength="24"
+                    >
+                </div>
+                
+                <div class="login-form__error" id="login-error"></div>
+                
+                <button type="submit" class="login-form__submit">
+                    <span class="btn-text">Enter</span>
+                    <span class="btn-loading">Connecting...</span>
+                </button>
+            </form>
+        </section>
+        
+        <!-- Step 2: Room Selection -->
+        <section id="step-room" class="step">
+            <div class="player-greeting" id="player-greeting"></div>
+            
+            <div class="room-options">
+                <button class="room-option" id="btn-create-room">
+                    <span class="room-option__icon">⚔</span>
+                    <span class="room-option__title">Create Room</span>
+                    <span class="room-option__desc">Start a new session</span>
+                </button>
+                
+                <div class="room-divider">
+                    <span>or</span>
+                </div>
+                
+                <form class="join-form" id="join-form">
+                    <div class="join-form__header">
+                        <span class="room-option__icon">🔗</span>
+                        <span class="room-option__title">Join Room</span>
+                    </div>
+                    <div class="join-form__field">
+                        <input 
+                            type="text" 
+                            id="room-code" 
+                            name="room-code" 
+                            class="login-form__input join-form__input"
+                        placeholder="XXXXX"
+                        pattern="[A-Za-z0-9]{5}"
+                        maxlength="5"
+                        >
+                        <button type="submit" class="join-form__submit">→</button>
+                    </div>
+                    <div class="login-form__error" id="join-error"></div>
+                </form>
+            </div>
+        </section>
+        
+        <!-- Step 3: Role Selection -->
+        <section id="step-role" class="step">
+            <div class="role-header">
+                <span class="role-header__room" id="current-room-code"></span>
+                <span class="role-header__label">Choose Your Role</span>
             </div>
             
-            <div class="login-form__field">
-                <label for="password" class="login-form__label">Password</label>
-                <input 
-                    type="password" 
-                    id="password" 
-                    name="password" 
-                    class="login-form__input"
-                    required
-                    autocomplete="current-password"
-                >
+            <div class="role-grid">
+                <button class="role-card" data-role="Top">
+                    <span class="role-card__icon">👑</span>
+                    <span class="role-card__name">Top</span>
+                    <span class="role-card__desc">Lead the encounter</span>
+                </button>
+                
+                <button class="role-card" data-role="Bottom">
+                    <span class="role-card__icon">🌹</span>
+                    <span class="role-card__name">Bottom</span>
+                    <span class="role-card__desc">Surrender control</span>
+                </button>
+                
+                <button class="role-card" data-role="Observer">
+                    <span class="role-card__icon">👁</span>
+                    <span class="role-card__name">Observer</span>
+                    <span class="role-card__desc">Watch in silence</span>
+                </button>
+                
+                <button class="role-card" data-role="Photographer">
+                    <span class="role-card__icon">📸</span>
+                    <span class="role-card__name">Photographer</span>
+                    <span class="role-card__desc">Document the moment</span>
+                </button>
             </div>
             
-            <button type="submit" class="login-form__submit">Enter</button>
-        </form>
+            <div class="login-form__error" id="role-error"></div>
+        </section>
+        
+        <!-- Connection Status -->
+        <div class="connection-status" id="connection-status">
+            <span class="connection-status__dot"></span>
+            <span class="connection-status__text">Connecting...</span>
+        </div>
     </div>
 </main>
-{% endblock %}
 
+<script type="module" src="{{ get_url(path='js/app.js') }}"></script>
+{% endblock %}
