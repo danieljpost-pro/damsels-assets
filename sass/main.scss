@@ -1,0 +1,149 @@
+// Damsels - Main Stylesheet
+// =========================
+
+// Variables
+$color-bg: #0a0a0f;
+$color-surface: #12121a;
+$color-border: #2a2a3a;
+$color-text: #e8e6e3;
+$color-text-muted: #8a8a9a;
+$color-accent: #c9a227;
+$color-accent-hover: #e6b82e;
+
+$font-display: 'Cormorant Garamond', Georgia, serif;
+$font-mono: 'Fira Code', 'Consolas', monospace;
+
+$radius: 2px;
+$transition: 0.2s ease;
+
+// Reset
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+// Base
+html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    font-family: $font-mono;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: $color-text;
+    background-color: $color-bg;
+    background-image: 
+        radial-gradient(ellipse at 50% 0%, rgba($color-accent, 0.08) 0%, transparent 60%),
+        linear-gradient(180deg, $color-bg 0%, darken($color-bg, 2%) 100%);
+    min-height: 100vh;
+}
+
+// Welcome Page
+.welcome {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+}
+
+.welcome__container {
+    width: 100%;
+    max-width: 320px;
+    text-align: center;
+}
+
+.welcome__title {
+    font-family: $font-display;
+    font-size: 3rem;
+    font-weight: 400;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: $color-text;
+    margin-bottom: 0.25rem;
+}
+
+.welcome__tagline {
+    font-size: 0.75rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+    margin-bottom: 3rem;
+    
+    p {
+        margin: 0;
+    }
+}
+
+// Login Form
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.login-form__field {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.login-form__label {
+    font-size: 0.625rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+}
+
+.login-form__input {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    font-family: $font-mono;
+    font-size: 0.875rem;
+    color: $color-text;
+    background-color: $color-surface;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    outline: none;
+    transition: border-color $transition;
+
+    &:focus {
+        border-color: $color-accent;
+    }
+
+    &::placeholder {
+        color: $color-text-muted;
+    }
+}
+
+.login-form__submit {
+    margin-top: 0.5rem;
+    padding: 1rem 2rem;
+    font-family: $font-display;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: $color-bg;
+    background-color: $color-accent;
+    border: none;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: background-color $transition, transform $transition;
+
+    &:hover {
+        background-color: $color-accent-hover;
+    }
+
+    &:active {
+        transform: scale(0.98);
+    }
+}
+

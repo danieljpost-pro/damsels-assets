@@ -1,0 +1,30 @@
+# Damsels - Zola Configuration
+# ============================
+
+base_url = "https://damsels.example.com"
+title = "Damsels"
+description = "Enter the realm"
+
+# Build output directory
+output_dir = "build"
+
+# Compilation settings
+compile_sass = true
+minify_html = true
+build_search_index = false
+
+# Markdown settings
+[markdown]
+highlight_code = false
+smart_punctuation = true
+
+# Slugification
+[slugify]
+paths = "on"
+taxonomies = "on"
+anchors = "on"
+
+# Extra configuration
+[extra]
+# Add custom variables here
+
