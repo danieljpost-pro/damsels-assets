@@ -22,7 +22,9 @@ const CONFIG = {
     storage: {
         identity: 'damsels_identity',
         username: 'damsels_username',
-    }
+    },
+    // Development mode detection
+    isDev: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1',
 };
 
 // =============================================================================
@@ -46,6 +48,7 @@ const elements = {
     stepLogin: document.getElementById('step-login'),
     stepRoom: document.getElementById('step-room'),
     stepRole: document.getElementById('step-role'),
+    stepAdmin: document.getElementById('step-admin'),
     
     // Login form
     loginForm: document.getElementById('login-form'),
@@ -61,7 +64,7 @@ const elements = {
     
     // Role selection
     currentRoomCode: document.getElementById('current-room-code'),
-    roleCards: document.querySelectorAll('.role-card'),
+    roleCards: document.querySelectorAll('.role-card:not(.role-card--dev)'),
     roleError: document.getElementById('role-error'),
     
     // Connection status
@@ -74,14 +77,17 @@ const elements = {
 
 /**
  * Show a specific step and hide others.
+ * Exported to window for admin.js to use.
  */
 function showStep(stepName) {
     state.currentStep = stepName;
     
-    elements.stepLogin.classList.toggle('step--active', stepName === 'login');
-    elements.stepRoom.classList.toggle('step--active', stepName === 'room');
-    elements.stepRole.classList.toggle('step--active', stepName === 'role');
+    elements.stepLogin?.classList.toggle('step--active', stepName === 'login');
+    elements.stepRoom?.classList.toggle('step--active', stepName === 'room');
+    elements.stepRole?.classList.toggle('step--active', stepName === 'role');
+    elements.stepAdmin?.classList.toggle('step--active', stepName === 'admin');
 }
+window.showStep = showStep;
 
 /**
  * Display an error message in the specified container.
@@ -109,6 +115,8 @@ function clearError(element) {
  */
 function updateConnectionStatus(connected, text = null) {
     const statusEl = elements.connectionStatus;
+    if (!statusEl) return;
+    
     statusEl.classList.toggle('connection-status--connected', connected);
     statusEl.classList.toggle('connection-status--disconnected', !connected);
     
@@ -313,6 +321,11 @@ async function init() {
             elements.usernameInput.value = storedUsername;
         }
         
+        // Load dev admin module if in dev mode
+        if (CONFIG.isDev) {
+            loadDevModule();
+        }
+        
     } catch (error) {
         console.error('Failed to connect:', error);
         updateConnectionStatus(false, 'Connection failed');
@@ -323,20 +336,22 @@ async function init() {
 }
 
 /**
- * Set up all event listeners.
+ * Dynamically load the dev admin module.
  */
+function loadDevModule() {
+    const script = document.createElement('script');
+    script.src = '/js/dev/admin.js';
+    script.type = 'module';
+    script.onerror = () => console.warn('Dev admin module not found (expected in production)');
+    document.head.appendChild(script);
+}
+
 function setupEventListeners() {
-    // Login form submission
-    elements.loginForm.addEventListener('submit', handleLogin);
+    elements.loginForm?.addEventListener('submit', handleLogin);
+    elements.btnCreateRoom?.addEventListener('click', handleCreateRoom);
+    elements.joinForm?.addEventListener('submit', handleJoinRoom);
     
-    // Create room button
-    elements.btnCreateRoom.addEventListener('click', handleCreateRoom);
-    
-    // Join room form
-    elements.joinForm.addEventListener('submit', handleJoinRoom);
-    
-    // Room code formatting
-    elements.roomCodeInput.addEventListener('input', (e) => {
+    elements.roomCodeInput?.addEventListener('input', (e) => {
         formatRoomCode(e.target);
     });
     
@@ -485,4 +500,3 @@ async function handleRoleSelect(card) {
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', init);
-

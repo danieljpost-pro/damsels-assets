@@ -536,6 +536,314 @@ body {
 }
 
 // =============================================================================
+// Dev Mode Role Card
+// =============================================================================
+
+.role-card--dev {
+    border-color: #7c3aed;
+    position: relative;
+    
+    &::before {
+        background: radial-gradient(circle at center, rgba(124, 58, 237, 0.2) 0%, transparent 70%);
+    }
+    
+    &:hover {
+        border-color: #8b5cf6;
+    }
+}
+
+.role-card__dev-badge {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    font-size: 0.5rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    padding: 0.125rem 0.375rem;
+    background-color: #7c3aed;
+    color: #fff;
+    border-radius: 2px;
+}
+
+// =============================================================================
+// Admin Panel
+// =============================================================================
+
+.admin-panel {
+    text-align: left;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+.admin-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.admin-title {
+    font-family: $font-display;
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: $color-text;
+    margin: 0;
+}
+
+.admin-badge {
+    font-size: 0.5rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    padding: 0.25rem 0.5rem;
+    background-color: #7c3aed;
+    color: #fff;
+    border-radius: 2px;
+}
+
+.admin-back {
+    margin-left: auto;
+    padding: 0.5rem 1rem;
+    font-family: $font-mono;
+    font-size: 0.75rem;
+    color: $color-text-muted;
+    background: transparent;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: all $transition;
+    
+    &:hover {
+        color: $color-text;
+        border-color: $color-text-muted;
+    }
+}
+
+// Admin Tabs
+.admin-tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid $color-border;
+    padding-bottom: 0.25rem;
+}
+
+.admin-tab {
+    padding: 0.5rem 1rem;
+    font-family: $font-mono;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    color: $color-text-muted;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all $transition;
+    
+    &:hover {
+        color: $color-text;
+    }
+    
+    &.admin-tab--active {
+        color: $color-accent;
+        border-bottom-color: $color-accent;
+    }
+}
+
+// Admin Content
+.admin-content {
+    animation: stepIn $transition-slow forwards;
+    
+    &.admin-content--hidden {
+        display: none;
+    }
+}
+
+// Admin Form
+.admin-form {
+    background-color: $color-surface;
+    border: 1px solid $color-border;
+    border-radius: $radius-lg;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.admin-form__title {
+    font-family: $font-display;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: $color-text;
+    margin: 0 0 1rem 0;
+}
+
+.admin-form__row {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    align-items: flex-end;
+}
+
+.admin-field {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.admin-label {
+    font-size: 0.625rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+}
+
+.admin-input {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    font-family: $font-mono;
+    font-size: 0.8125rem;
+    color: $color-text;
+    background-color: $color-bg;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    outline: none;
+    transition: border-color $transition;
+    
+    &:focus {
+        border-color: $color-accent;
+    }
+    
+    &::placeholder {
+        color: $color-text-muted;
+    }
+}
+
+.admin-input--small {
+    max-width: 80px;
+}
+
+.admin-select {
+    @extend .admin-input;
+    cursor: pointer;
+    
+    option {
+        background-color: $color-surface;
+    }
+}
+
+.admin-textarea {
+    @extend .admin-input;
+    min-height: 60px;
+    resize: vertical;
+    margin-bottom: 0.75rem;
+}
+
+.admin-textarea--tall {
+    min-height: 100px;
+}
+
+.admin-arrow {
+    font-size: 0.75rem;
+    color: $color-text-muted;
+    padding-bottom: 0.625rem;
+}
+
+.admin-btn {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-family: $font-display;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: $color-bg;
+    background-color: $color-accent;
+    border: none;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: background-color $transition;
+    
+    &:hover {
+        background-color: $color-accent-hover;
+    }
+}
+
+// Admin List
+.admin-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.admin-list__empty {
+    text-align: center;
+    font-size: 0.75rem;
+    color: $color-text-muted;
+    padding: 2rem 1rem;
+}
+
+.admin-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background-color: $color-surface;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    transition: border-color $transition;
+    
+    &:hover {
+        border-color: $color-border-hover;
+    }
+}
+
+.admin-item__info {
+    flex: 1;
+    min-width: 0;
+}
+
+.admin-item__name {
+    display: block;
+    font-size: 0.875rem;
+    color: $color-text;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.admin-item__meta {
+    display: block;
+    font-size: 0.6875rem;
+    color: $color-text-muted;
+    margin-top: 0.125rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.admin-item__delete {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    color: $color-text-muted;
+    background: transparent;
+    border: none;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: all $transition;
+    
+    &:hover {
+        color: $color-error;
+        background-color: rgba($color-error, 0.1);
+    }
+}
+
+// =============================================================================
 // Responsive
 // =============================================================================
 
@@ -551,5 +859,17 @@ body {
     
     .welcome__container {
         max-width: 100%;
+    }
+    
+    .admin-form__row {
+        flex-direction: column;
+    }
+    
+    .admin-input--small {
+        max-width: 100%;
+    }
+    
+    .admin-tabs {
+        flex-wrap: wrap;
     }
 }

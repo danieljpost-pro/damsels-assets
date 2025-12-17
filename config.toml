@@ -26,5 +26,7 @@ anchors = "on"
 
 # Extra configuration
 [extra]
-# Add custom variables here
+# Development mode - enables admin UI and dev features
+# Set to false for production builds
+dev_mode = true
 

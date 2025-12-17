@@ -61,9 +61,9 @@
                             id="room-code" 
                             name="room-code" 
                             class="login-form__input join-form__input"
-                        placeholder="XXXXX"
-                        pattern="[A-Za-z0-9]{5}"
-                        maxlength="5"
+                            placeholder="XXXXX"
+                            pattern="[A-Za-z0-9]{5}"
+                            maxlength="5"
                         >
                         <button type="submit" class="join-form__submit">→</button>
                     </div>
@@ -103,10 +103,108 @@
                     <span class="role-card__name">Photographer</span>
                     <span class="role-card__desc">Document the moment</span>
                 </button>
+                
+                {# DEV ONLY: ActivityAdmin role card - only included if dev_mode is true #}
+                {% if config.extra.dev_mode %}
+                <button class="role-card role-card--dev" data-role="ActivityAdmin" id="role-activity-admin" style="display: none;">
+                    <span class="role-card__icon">⚙️</span>
+                    <span class="role-card__name">Admin</span>
+                    <span class="role-card__desc">Manage activities</span>
+                    <span class="role-card__dev-badge">DEV</span>
+                </button>
+                {% endif %}
             </div>
             
             <div class="login-form__error" id="role-error"></div>
         </section>
+        
+        {# DEV ONLY: Admin Panel - only included if dev_mode is true #}
+        {% if config.extra.dev_mode %}
+        <section id="step-admin" class="step admin-panel">
+            <div class="admin-header">
+                <h2 class="admin-title">Activity Admin</h2>
+                <span class="admin-badge">DEVELOPMENT</span>
+                <button class="admin-back" id="admin-back">← Back</button>
+            </div>
+            
+            <div class="admin-tabs">
+                <button class="admin-tab admin-tab--active" data-tab="categories">Categories</button>
+                <button class="admin-tab" data-tab="activities">Activities</button>
+                <button class="admin-tab" data-tab="prerequisites">Prerequisites</button>
+            </div>
+            
+            <div class="admin-content" id="tab-categories">
+                <form class="admin-form" id="form-category">
+                    <h3 class="admin-form__title">New Category</h3>
+                    <div class="admin-form__row">
+                        <input type="text" name="name" placeholder="Category name" class="admin-input" required>
+                        <input type="number" name="display_order" placeholder="Order" class="admin-input admin-input--small" value="0">
+                    </div>
+                    <textarea name="description" placeholder="Description..." class="admin-textarea" required></textarea>
+                    <button type="submit" class="admin-btn">Create Category</button>
+                </form>
+                <div class="admin-list" id="list-categories">
+                    <p class="admin-list__empty">No categories yet</p>
+                </div>
+            </div>
+            
+            <div class="admin-content admin-content--hidden" id="tab-activities">
+                <form class="admin-form" id="form-activity">
+                    <h3 class="admin-form__title">New Activity</h3>
+                    <div class="admin-form__row">
+                        <select name="category_id" class="admin-select" required>
+                            <option value="">Select category...</option>
+                        </select>
+                    </div>
+                    <input type="text" name="name" placeholder="Activity name" class="admin-input" required>
+                    <textarea name="description" placeholder="Short description..." class="admin-textarea" required></textarea>
+                    <textarea name="instructions" placeholder="Full instructions..." class="admin-textarea admin-textarea--tall" required></textarea>
+                    <input type="url" name="video_url" placeholder="Video URL (optional)" class="admin-input">
+                    <div class="admin-form__row">
+                        <div class="admin-field">
+                            <label class="admin-label">XP Required</label>
+                            <input type="number" name="xp_required" class="admin-input" value="0" min="0">
+                        </div>
+                        <div class="admin-field">
+                            <label class="admin-label">XP Reward</label>
+                            <input type="number" name="xp_reward" class="admin-input" value="10" min="0">
+                        </div>
+                    </div>
+                    <button type="submit" class="admin-btn">Create Activity</button>
+                </form>
+                <div class="admin-list" id="list-activities">
+                    <p class="admin-list__empty">No activities yet</p>
+                </div>
+            </div>
+            
+            <div class="admin-content admin-content--hidden" id="tab-prerequisites">
+                <form class="admin-form" id="form-prerequisite">
+                    <h3 class="admin-form__title">Add Prerequisite</h3>
+                    <div class="admin-form__row">
+                        <div class="admin-field">
+                            <label class="admin-label">Activity</label>
+                            <select name="activity_id" class="admin-select" id="prereq-activity" required>
+                                <option value="">Select activity...</option>
+                            </select>
+                        </div>
+                        <span class="admin-arrow">requires →</span>
+                        <div class="admin-field">
+                            <label class="admin-label">Prerequisite</label>
+                            <select name="prerequisite_id" class="admin-select" id="prereq-prereq" required>
+                                <option value="">Select prerequisite...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="admin-btn">Add Prerequisite</button>
+                </form>
+                <div class="admin-list" id="list-prerequisites">
+                    <p class="admin-list__empty">No prerequisites yet</p>
+                </div>
+            </div>
+            
+            <div class="login-form__error" id="admin-error"></div>
+        </section>
+        {% endif %}
         
         <!-- Connection Status -->
         <div class="connection-status" id="connection-status">
