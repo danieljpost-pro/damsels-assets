@@ -536,6 +536,192 @@ body {
 }
 
 // =============================================================================
+// Room Lobby
+// =============================================================================
+
+.lobby {
+    text-align: center;
+}
+
+.lobby__header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.lobby__code {
+    font-family: $font-mono;
+    font-size: 2rem;
+    letter-spacing: 0.2em;
+    color: $color-accent;
+    font-weight: 600;
+}
+
+.lobby__share {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    background-color: $color-surface;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: all $transition;
+    
+    &:hover {
+        border-color: $color-accent;
+        background-color: $color-surface-elevated;
+    }
+    
+    &:active {
+        transform: scale(0.95);
+    }
+}
+
+.lobby__info {
+    margin-bottom: 1.5rem;
+}
+
+.lobby__label {
+    font-size: 0.625rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+}
+
+.lobby__players {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    min-height: 100px;
+}
+
+.lobby__empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100px;
+    color: $color-text-muted;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+}
+
+.player-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background-color: $color-surface;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    animation: playerJoin 0.3s ease forwards;
+}
+
+@keyframes playerJoin {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.player-card__avatar {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    background-color: $color-bg;
+    border-radius: 50%;
+}
+
+.player-card__info {
+    flex: 1;
+    text-align: left;
+}
+
+.player-card__name {
+    display: block;
+    font-size: 0.875rem;
+    color: $color-text;
+}
+
+.player-card__role {
+    display: inline-block;
+    font-size: 0.5625rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+    padding: 0.125rem 0.375rem;
+    background-color: $color-bg;
+    border-radius: 2px;
+    margin-top: 0.25rem;
+}
+
+.player-card__role--top {
+    color: #fbbf24;
+    background-color: rgba(251, 191, 36, 0.1);
+}
+
+.player-card__role--bottom {
+    color: #f472b6;
+    background-color: rgba(244, 114, 182, 0.1);
+}
+
+.player-card__role--observer {
+    color: #60a5fa;
+    background-color: rgba(96, 165, 250, 0.1);
+}
+
+.player-card__role--photographer {
+    color: #4ade80;
+    background-color: rgba(74, 222, 128, 0.1);
+}
+
+.player-card--you {
+    border-color: $color-accent;
+    
+    .player-card__name::after {
+        content: ' (you)';
+        font-size: 0.625rem;
+        color: $color-accent;
+        font-weight: normal;
+    }
+}
+
+.lobby__actions {
+    margin-top: 1rem;
+}
+
+.lobby__leave {
+    padding: 0.75rem 1.5rem;
+    font-family: $font-mono;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+    background-color: transparent;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: all $transition;
+    
+    &:hover {
+        color: $color-error;
+        border-color: $color-error;
+    }
+}
+
+// =============================================================================
 // Dev Mode Role Card
 // =============================================================================
 
@@ -600,6 +786,25 @@ body {
     background-color: #7c3aed;
     color: #fff;
     border-radius: 2px;
+    
+    // Skill badge - teal/cyan
+    &--skill {
+        background-color: #0d9488;
+        font-size: 0.5rem;
+        padding: 0.125rem 0.375rem;
+        margin-right: 0.375rem;
+        vertical-align: middle;
+    }
+    
+    // Activity badge - amber/gold
+    &--activity {
+        background-color: $color-accent;
+        color: $color-bg;
+        font-size: 0.5rem;
+        padding: 0.125rem 0.375rem;
+        margin-right: 0.375rem;
+        vertical-align: middle;
+    }
 }
 
 .admin-back {

@@ -118,6 +118,30 @@
             <div class="login-form__error" id="role-error"></div>
         </section>
         
+        <!-- Step 4: Room Lobby -->
+        <section id="step-lobby" class="step">
+            <div class="lobby">
+                <div class="lobby__header">
+                    <span class="lobby__code" id="lobby-room-code"></span>
+                    <button class="lobby__share" id="btn-share-code" title="Copy room code">
+                        📋
+                    </button>
+                </div>
+                
+                <div class="lobby__info">
+                    <span class="lobby__label">Waiting for players...</span>
+                </div>
+                
+                <div class="lobby__players" id="lobby-players">
+                    <!-- Players will be inserted here -->
+                </div>
+                
+                <div class="lobby__actions">
+                    <button class="lobby__leave" id="btn-leave-room">Leave Room</button>
+                </div>
+            </div>
+        </section>
+        
         {# DEV ONLY: Admin Panel - only included if dev_mode is true #}
         {% if config.extra.dev_mode %}
         <section id="step-admin" class="step admin-panel">
@@ -129,7 +153,7 @@
             
             <div class="admin-tabs">
                 <button class="admin-tab admin-tab--active" data-tab="categories">Categories</button>
-                <button class="admin-tab" data-tab="activities">Activities</button>
+                <button class="admin-tab" data-tab="activities">Skills & Activities</button>
                 <button class="admin-tab" data-tab="prerequisites">Prerequisites</button>
             </div>
             
@@ -150,13 +174,23 @@
             
             <div class="admin-content admin-content--hidden" id="tab-activities">
                 <form class="admin-form" id="form-activity">
-                    <h3 class="admin-form__title">New Activity</h3>
+                    <h3 class="admin-form__title">New Activity / Skill</h3>
                     <div class="admin-form__row">
-                        <select name="category_id" class="admin-select" required>
-                            <option value="">Select category...</option>
-                        </select>
+                        <div class="admin-field">
+                            <label class="admin-label">Category</label>
+                            <select name="category_id" class="admin-select" required>
+                                <option value="">Select category...</option>
+                            </select>
+                        </div>
+                        <div class="admin-field">
+                            <label class="admin-label">Type</label>
+                            <select name="kind" class="admin-select" required>
+                                <option value="Activity">Activity</option>
+                                <option value="Skill">Skill</option>
+                            </select>
+                        </div>
                     </div>
-                    <input type="text" name="name" placeholder="Activity name" class="admin-input" required>
+                    <input type="text" name="name" placeholder="Name" class="admin-input" required>
                     <textarea name="description" placeholder="Short description..." class="admin-textarea" required></textarea>
                     <textarea name="instructions" placeholder="Full instructions..." class="admin-textarea admin-textarea--tall" required></textarea>
                     <input type="url" name="video_url" placeholder="Video URL (optional)" class="admin-input">
@@ -170,10 +204,10 @@
                             <input type="number" name="xp_reward" class="admin-input" value="10" min="0">
                         </div>
                     </div>
-                    <button type="submit" class="admin-btn">Create Activity</button>
+                    <button type="submit" class="admin-btn">Create</button>
                 </form>
                 <div class="admin-list" id="list-activities">
-                    <p class="admin-list__empty">No activities yet</p>
+                    <p class="admin-list__empty">No activities or skills yet</p>
                 </div>
             </div>
             

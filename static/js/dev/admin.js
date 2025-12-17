@@ -67,15 +67,16 @@ const adminClient = {
     },
     
     /**
-     * Create a new activity.
+     * Create a new activity or skill.
      */
-    async createActivity(categoryId, name, description, instructions, videoUrl, xpRequired, xpReward) {
-        console.log('[DEV] Creating activity:', name);
+    async createActivity(categoryId, kind, name, description, instructions, videoUrl, xpRequired, xpReward) {
+        console.log('[DEV] Creating', kind + ':', name);
         await simulateDelay(200);
         
         const activity = {
             id: Date.now(),
             category_id: categoryId,
+            kind, // 'Skill' or 'Activity'
             name,
             description,
             instructions,
@@ -258,10 +259,13 @@ function renderActivityList() {
     
     list.innerHTML = adminState.activities.map(act => {
         const category = adminState.categories.find(c => c.id === act.category_id);
+        const kindBadge = act.kind === 'Skill' 
+            ? '<span class="admin-badge admin-badge--skill">SKILL</span>' 
+            : '<span class="admin-badge admin-badge--activity">ACTIVITY</span>';
         return `
             <div class="admin-item" data-id="${act.id}">
                 <div class="admin-item__info">
-                    <span class="admin-item__name">${escapeHtml(act.name)}</span>
+                    <span class="admin-item__name">${kindBadge} ${escapeHtml(act.name)}</span>
                     <span class="admin-item__meta">
                         ${category ? escapeHtml(category.name) : 'Unknown'} · 
                         ${act.xp_required} XP req · 
@@ -289,6 +293,7 @@ function renderPrerequisiteList() {
     list.innerHTML = adminState.prerequisites.map(prereq => {
         const activity = adminState.activities.find(a => a.id === prereq.activity_id);
         const prerequisite = adminState.activities.find(a => a.id === prereq.prerequisite_id);
+        const prereqKind = prerequisite?.kind === 'Skill' ? '(Skill)' : '(Activity)';
         return `
             <div class="admin-item" data-id="${prereq.id}">
                 <div class="admin-item__info">
@@ -296,7 +301,7 @@ function renderPrerequisiteList() {
                         ${activity ? escapeHtml(activity.name) : 'Unknown'}
                     </span>
                     <span class="admin-item__meta">
-                        requires → ${prerequisite ? escapeHtml(prerequisite.name) : 'Unknown'}
+                        requires → ${prerequisite ? escapeHtml(prerequisite.name) : 'Unknown'} ${prereqKind}
                     </span>
                 </div>
                 <button class="admin-item__delete" onclick="window.adminDeletePrerequisite(${prereq.id})">×</button>
@@ -376,9 +381,12 @@ async function handleCreateActivity(e) {
         return;
     }
     
+    const kind = formData.get('kind') || 'Activity';
+    
     try {
         await adminClient.createActivity(
             categoryId,
+            kind,
             formData.get('name'),
             formData.get('description'),
             formData.get('instructions'),

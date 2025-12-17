@@ -36,7 +36,10 @@ const state = {
     identity: null,
     player: null,
     currentRoom: null,
+    currentRole: null,
     currentStep: 'login',
+    // Room members (populated by SpacetimeDB subscription in production)
+    roomMembers: [],
 };
 
 // =============================================================================
@@ -48,6 +51,7 @@ const elements = {
     stepLogin: document.getElementById('step-login'),
     stepRoom: document.getElementById('step-room'),
     stepRole: document.getElementById('step-role'),
+    stepLobby: document.getElementById('step-lobby'),
     stepAdmin: document.getElementById('step-admin'),
     
     // Login form
@@ -67,6 +71,12 @@ const elements = {
     roleCards: document.querySelectorAll('.role-card:not(.role-card--dev)'),
     roleError: document.getElementById('role-error'),
     
+    // Lobby
+    lobbyRoomCode: document.getElementById('lobby-room-code'),
+    lobbyPlayers: document.getElementById('lobby-players'),
+    btnShareCode: document.getElementById('btn-share-code'),
+    btnLeaveRoom: document.getElementById('btn-leave-room'),
+    
     // Connection status
     connectionStatus: document.getElementById('connection-status'),
 };
@@ -85,6 +95,7 @@ function showStep(stepName) {
     elements.stepLogin?.classList.toggle('step--active', stepName === 'login');
     elements.stepRoom?.classList.toggle('step--active', stepName === 'room');
     elements.stepRole?.classList.toggle('step--active', stepName === 'role');
+    elements.stepLobby?.classList.toggle('step--active', stepName === 'lobby');
     elements.stepAdmin?.classList.toggle('step--active', stepName === 'admin');
 }
 window.showStep = showStep;
@@ -140,6 +151,139 @@ function formatRoomCode(input) {
     // 5 character room code, uppercase alphanumeric only
     let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
     input.value = value.slice(0, 5);
+}
+
+// =============================================================================
+// Lobby Functions
+// =============================================================================
+
+/**
+ * Get the icon for a role.
+ */
+function getRoleIcon(role) {
+    const icons = {
+        'Top': '👑',
+        'Bottom': '🌹',
+        'Observer': '👁',
+        'Photographer': '📸',
+        'ActivityAdmin': '⚙️',
+    };
+    return icons[role] || '👤';
+}
+
+/**
+ * Render the player list in the lobby.
+ */
+function renderPlayerList() {
+    const container = elements.lobbyPlayers;
+    if (!container) return;
+    
+    if (state.roomMembers.length === 0) {
+        container.innerHTML = '<div class="lobby__empty">No players yet</div>';
+        return;
+    }
+    
+    container.innerHTML = state.roomMembers.map(member => {
+        const isYou = member.playerId === state.player?.id;
+        const roleClass = `player-card__role--${member.role.toLowerCase()}`;
+        
+        return `
+            <div class="player-card ${isYou ? 'player-card--you' : ''}">
+                <div class="player-card__avatar">${getRoleIcon(member.role)}</div>
+                <div class="player-card__info">
+                    <span class="player-card__name">${escapeHtml(member.username)}</span>
+                    <span class="player-card__role ${roleClass}">${member.role}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Add a player to the room (called when someone joins).
+ */
+function addPlayerToRoom(playerId, username, role) {
+    // Check if already in list
+    const existing = state.roomMembers.find(m => m.playerId === playerId);
+    if (existing) return;
+    
+    state.roomMembers.push({ playerId, username, role });
+    renderPlayerList();
+}
+
+/**
+ * Remove a player from the room (called when someone leaves).
+ */
+function removePlayerFromRoom(playerId) {
+    state.roomMembers = state.roomMembers.filter(m => m.playerId !== playerId);
+    renderPlayerList();
+}
+
+/**
+ * Show the lobby with the current room info.
+ */
+function showLobby() {
+    // Set room code display
+    if (elements.lobbyRoomCode) {
+        elements.lobbyRoomCode.textContent = state.currentRoom?.code || '?????';
+    }
+    
+    // Render current players
+    renderPlayerList();
+    
+    // Show lobby step
+    showStep('lobby');
+}
+
+/**
+ * Copy room code to clipboard.
+ */
+async function copyRoomCode() {
+    const code = state.currentRoom?.code;
+    if (!code) return;
+    
+    try {
+        await navigator.clipboard.writeText(code);
+        
+        // Visual feedback
+        const btn = elements.btnShareCode;
+        if (btn) {
+            const originalText = btn.textContent;
+            btn.textContent = '✓';
+            setTimeout(() => {
+                btn.textContent = originalText;
+            }, 1500);
+        }
+    } catch (err) {
+        console.error('Failed to copy:', err);
+    }
+}
+
+/**
+ * Leave the current room.
+ */
+async function leaveRoom() {
+    console.log('Leaving room:', state.currentRoom?.code);
+    
+    // In production, this would call:
+    // await client.call('leave_room', state.currentRoom.id);
+    
+    // Clear room state
+    state.currentRoom = null;
+    state.currentRole = null;
+    state.roomMembers = [];
+    
+    // Go back to room selection
+    showStep('room');
+}
+
+/**
+ * Escape HTML to prevent XSS.
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // =============================================================================
@@ -241,6 +385,18 @@ class SpacetimeClient {
             ownerId: state.player.id,
         };
         
+        state.currentRole = role;
+        
+        // Add self to room members
+        state.roomMembers = [{
+            playerId: state.player.id,
+            username: state.player.username,
+            role: role,
+        }];
+        
+        // Simulate other players joining (for demo purposes)
+        this.simulatePlayersJoining();
+        
         return state.currentRoom;
     }
     
@@ -261,7 +417,50 @@ class SpacetimeClient {
             code: roomCode.toUpperCase(),
         };
         
+        state.currentRole = role;
+        
+        // Simulate existing players in room
+        state.roomMembers = [
+            {
+                playerId: 1001,
+                username: 'RoomHost',
+                role: 'Top',
+            },
+            {
+                playerId: state.player.id,
+                username: state.player.username,
+                role: role,
+            },
+        ];
+        
         return state.currentRoom;
+    }
+    
+    /**
+     * Simulate other players joining (for demo purposes).
+     */
+    simulatePlayersJoining() {
+        const demoPlayers = [
+            { name: 'Violet', role: 'Bottom' },
+            { name: 'Shadow', role: 'Observer' },
+            { name: 'Lens', role: 'Photographer' },
+        ];
+        
+        let index = 0;
+        const interval = setInterval(() => {
+            if (index >= demoPlayers.length || state.currentStep !== 'lobby') {
+                clearInterval(interval);
+                return;
+            }
+            
+            const player = demoPlayers[index];
+            addPlayerToRoom(
+                2000 + index,
+                player.name,
+                player.role
+            );
+            index++;
+        }, 2000);
     }
     
     // Utility methods
@@ -359,6 +558,10 @@ function setupEventListeners() {
     elements.roleCards.forEach(card => {
         card.addEventListener('click', () => handleRoleSelect(card));
     });
+    
+    // Lobby actions
+    elements.btnShareCode?.addEventListener('click', copyRoomCode);
+    elements.btnLeaveRoom?.addEventListener('click', leaveRoom);
 }
 
 /**
@@ -454,6 +657,14 @@ async function handleJoinRoom(e) {
 async function handleRoleSelect(card) {
     const role = card.dataset.role;
     
+    // Handle ActivityAdmin - delegate to dev module
+    if (role === 'ActivityAdmin') {
+        if (window.showAdminPanel) {
+            window.showAdminPanel();
+        }
+        return;
+    }
+    
     // Visual feedback
     elements.roleCards.forEach(c => c.classList.remove('role-card--selected'));
     card.classList.add('role-card--selected');
@@ -464,30 +675,23 @@ async function handleRoleSelect(card) {
     try {
         if (state.pendingAction === 'create') {
             // Create the room with selected role
-            const room = await client.createRoom(role);
-            
-            console.log('Room created:', room.code);
-            
-            // Show the room code to share
-            alert(`Room created!\n\nShare this code: ${room.code}`);
-            
-            // In a full implementation, would transition to game/lobby view
+            await client.createRoom(role);
+            console.log('Room created:', state.currentRoom.code);
             
         } else if (state.pendingAction === 'join') {
             // Join the room with selected role
             await client.joinRoom(state.pendingRoomCode, role);
-            
             console.log('Joined room:', state.pendingRoomCode);
-            
-            // In a full implementation, would transition to game/lobby view
-            alert(`Joined room ${state.pendingRoomCode} as ${role}!`);
         }
         
-        // For now, reset to room step (would normally go to game)
-        setTimeout(() => {
-            card.classList.remove('role-card--loading');
-            showStep('room');
-        }, 500);
+        // Clear pending action
+        state.pendingAction = null;
+        state.pendingRoomCode = null;
+        
+        // Remove loading state and show lobby
+        card.classList.remove('role-card--loading');
+        card.classList.remove('role-card--selected');
+        showLobby();
         
     } catch (error) {
         showError(elements.roleError, error.message);
