@@ -5,6 +5,8 @@
  * for login, room creation/joining, and role selection.
  */
 
+import { SpacetimeDBClient } from './spacetimedb-client.js';
+
 // =============================================================================
 // Configuration
 // =============================================================================
@@ -12,11 +14,12 @@
 const CONFIG = {
     // SpacetimeDB connection settings
     spacetimedb: {
-        // Local development (Zola proxies to SpacetimeDB)
+        // Local development
         host: window.location.hostname === 'localhost' 
-            ? 'ws://localhost:3000' 
-            : 'wss://spacetimedb.example.com',
+            ? 'http://localhost:3000' 
+            : 'https://spacetimedb.example.com',
         module: 'damsels',
+        pollRate: 2000, // Poll every 2 seconds for room updates
     },
     // Local storage keys
     storage: {
@@ -265,8 +268,8 @@ async function copyRoomCode() {
 async function leaveRoom() {
     console.log('Leaving room:', state.currentRoom?.code);
     
-    // In production, this would call:
-    // await client.call('leave_room', state.currentRoom.id);
+    // Call SpacetimeDB to leave the room
+    await client.leaveCurrentRoom();
     
     // Clear room state
     state.currentRoom = null;
@@ -287,23 +290,16 @@ function escapeHtml(text) {
 }
 
 // =============================================================================
-// SpacetimeDB Connection (Placeholder)
+// SpacetimeDB Connection (Real HTTP Client)
 // =============================================================================
 
 /**
- * SpacetimeDB client placeholder.
- * 
- * In production, this would be replaced with the actual generated client
- * from `spacetime generate --lang typescript`.
- * 
- * Example usage with real SDK:
- * 
- * import { SpacetimeDBClient, Identity } from '@clockworklabs/spacetimedb-sdk';
- * import { Player, Room, RoomMember } from './module_bindings';
+ * SpacetimeDB client wrapper.
+ * Uses HTTP API for reducer calls and SQL queries.
  */
-
 class SpacetimeClient {
     constructor() {
+        this.client = new SpacetimeDBClient(CONFIG.spacetimedb);
         this.connected = false;
         this.identity = null;
         this.onConnect = null;
@@ -317,24 +313,33 @@ class SpacetimeClient {
     async connect() {
         console.log('Connecting to SpacetimeDB...');
         
-        // Simulate connection delay
-        await this.simulateDelay(500);
+        // Set up callbacks
+        this.client.onConnect = () => {
+            this.connected = true;
+            state.connected = true;
+            state.identity = this.client.identity;
+            if (this.onConnect) this.onConnect();
+        };
         
-        // Load or generate identity
-        let storedIdentity = localStorage.getItem(CONFIG.storage.identity);
-        if (storedIdentity) {
-            this.identity = storedIdentity;
-        } else {
-            this.identity = this.generateIdentity();
-            localStorage.setItem(CONFIG.storage.identity, this.identity);
-        }
+        this.client.onDisconnect = () => {
+            this.connected = false;
+            state.connected = false;
+            if (this.onDisconnect) this.onDisconnect();
+        };
         
-        this.connected = true;
-        state.connected = true;
-        state.identity = this.identity;
+        this.client.onError = (error) => {
+            if (this.onError) this.onError(error);
+        };
         
-        if (this.onConnect) this.onConnect();
+        // Set up room members update callback
+        this.client.onRoomMembersUpdate = (members) => {
+            state.roomMembers = members;
+            renderPlayerList();
+        };
         
+        await this.client.connect();
+        
+        this.identity = this.client.identity;
         console.log('Connected with identity:', this.identity);
     }
     
@@ -344,60 +349,59 @@ class SpacetimeClient {
     async registerPlayer(username) {
         console.log('Registering player:', username);
         
-        await this.simulateDelay(300);
-        
-        // Simulate validation
         if (username.length < 2) {
             throw new Error('Username must be at least 2 characters');
         }
         
-        // In production, this would call:
-        // await this.client.call('register_player', username);
-        
-        state.player = {
-            id: Math.floor(Math.random() * 10000),
-            username: username,
-            identity: this.identity,
-            xp: 0,
-        };
-        
-        localStorage.setItem(CONFIG.storage.username, username);
-        
-        return state.player;
+        try {
+            const player = await this.client.registerPlayer(username);
+            
+            state.player = {
+                id: player.id,
+                username: player.username,
+                identity: player.identity,
+                xp: player.xp || 0,
+            };
+            
+            localStorage.setItem(CONFIG.storage.username, username);
+            
+            return state.player;
+        } catch (error) {
+            console.error('Registration failed:', error);
+            throw new Error(error.message || 'Registration failed');
+        }
     }
     
     /**
-     * Create a new room.
+     * Create a new room (sign in with room).
      */
     async createRoom(role) {
         console.log('Creating room with role:', role);
         
-        await this.simulateDelay(300);
-        
-        // In production, this would call:
-        // await this.client.call('create_room', role);
-        
-        const code = this.generateRoomCode();
-        
-        state.currentRoom = {
-            id: Math.floor(Math.random() * 10000),
-            code: code,
-            ownerId: state.player.id,
-        };
-        
-        state.currentRole = role;
-        
-        // Add self to room members
-        state.roomMembers = [{
-            playerId: state.player.id,
-            username: state.player.username,
-            role: role,
-        }];
-        
-        // Simulate other players joining (for demo purposes)
-        this.simulatePlayersJoining();
-        
-        return state.currentRoom;
+        try {
+            const result = await this.client.signInWithRoom(state.player.username, role);
+            
+            if (result.room) {
+                state.currentRoom = {
+                    id: result.room.id,
+                    code: result.room.code,
+                    ownerId: result.room.ownerId,
+                };
+            }
+            
+            state.currentRole = role;
+            state.roomMembers = result.members || [];
+            
+            // Start polling for real-time updates
+            if (state.currentRoom) {
+                this.client.startPolling(state.currentRoom.id, state.player.id);
+            }
+            
+            return state.currentRoom;
+        } catch (error) {
+            console.error('Room creation failed:', error);
+            throw new Error(error.message || 'Failed to create room');
+        }
     }
     
     /**
@@ -406,81 +410,40 @@ class SpacetimeClient {
     async joinRoom(roomCode, role) {
         console.log('Joining room:', roomCode, 'with role:', role);
         
-        await this.simulateDelay(300);
-        
-        // In production, this would call:
-        // await this.client.call('join_room', roomCode, role);
-        
-        // Simulate room lookup (in production, would validate against DB)
-        state.currentRoom = {
-            id: Math.floor(Math.random() * 10000),
-            code: roomCode.toUpperCase(),
-        };
-        
-        state.currentRole = role;
-        
-        // Simulate existing players in room
-        state.roomMembers = [
-            {
-                playerId: 1001,
-                username: 'RoomHost',
-                role: 'Top',
-            },
-            {
-                playerId: state.player.id,
-                username: state.player.username,
-                role: role,
-            },
-        ];
-        
-        return state.currentRoom;
+        try {
+            const result = await this.client.joinRoom(roomCode, role);
+            
+            state.currentRoom = {
+                id: result.room.id,
+                code: result.room.code,
+                ownerId: result.room.ownerId,
+            };
+            
+            state.currentRole = role;
+            state.roomMembers = result.members || [];
+            
+            // Start polling for real-time updates
+            this.client.startPolling(state.currentRoom.id, state.player.id);
+            
+            return state.currentRoom;
+        } catch (error) {
+            console.error('Join room failed:', error);
+            throw new Error(error.message || 'Failed to join room');
+        }
     }
     
     /**
-     * Simulate other players joining (for demo purposes).
+     * Leave the current room.
      */
-    simulatePlayersJoining() {
-        const demoPlayers = [
-            { name: 'Violet', role: 'Bottom' },
-            { name: 'Shadow', role: 'Observer' },
-            { name: 'Lens', role: 'Photographer' },
-        ];
+    async leaveCurrentRoom() {
+        if (!state.currentRoom) return;
         
-        let index = 0;
-        const interval = setInterval(() => {
-            if (index >= demoPlayers.length || state.currentStep !== 'lobby') {
-                clearInterval(interval);
-                return;
-            }
-            
-            const player = demoPlayers[index];
-            addPlayerToRoom(
-                2000 + index,
-                player.name,
-                player.role
-            );
-            index++;
-        }, 2000);
-    }
-    
-    // Utility methods
-    
-    generateIdentity() {
-        return 'id_' + Math.random().toString(36).substring(2, 15);
-    }
-    
-    generateRoomCode() {
-        // 5 character code, excluding ambiguous characters (0, O, I, L, 1)
-        const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-        let code = '';
-        for (let i = 0; i < 5; i++) {
-            code += chars[Math.floor(Math.random() * chars.length)];
+        try {
+            await this.client.leaveRoom(state.currentRoom.id);
+            this.client.stopPolling();
+        } catch (error) {
+            console.error('Leave room failed:', error);
         }
-        return code;
-    }
-    
-    simulateDelay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
 
