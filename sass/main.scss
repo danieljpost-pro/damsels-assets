@@ -874,6 +874,12 @@ body {
     margin-bottom: 1.5rem;
 }
 
+.admin-form--secondary {
+    background-color: rgba($color-bg, 0.5);
+    border-color: rgba($color-border, 0.5);
+    margin-top: 2rem;
+}
+
 .admin-form__title {
     font-family: $font-display;
     font-size: 1rem;

@@ -13,6 +13,8 @@ const adminState = {
     categories: [],
     activities: [],
     prerequisites: [],
+    equipment: [],
+    activityEquipment: [],
 };
 
 // =============================================================================
@@ -27,9 +29,13 @@ const adminElements = {
     formCategory: document.getElementById('form-category'),
     formActivity: document.getElementById('form-activity'),
     formPrerequisite: document.getElementById('form-prerequisite'),
+    formEquipment: document.getElementById('form-equipment'),
+    formActivityEquipment: document.getElementById('form-activity-equipment'),
     listCategories: document.getElementById('list-categories'),
     listActivities: document.getElementById('list-activities'),
     listPrerequisites: document.getElementById('list-prerequisites'),
+    listEquipment: document.getElementById('list-equipment'),
+    listActivityEquipment: document.getElementById('list-activity-equipment'),
     roleActivityAdmin: document.getElementById('role-activity-admin'),
 };
 
@@ -128,6 +134,62 @@ const adminClient = {
         
         adminState.prerequisites = adminState.prerequisites.filter(p => p.id !== prereqId);
     },
+    
+    /**
+     * Create a new piece of equipment.
+     */
+    async createEquipment(name, description) {
+        console.log('[DEV] Creating equipment:', name);
+        await simulateDelay(200);
+        
+        const equipment = {
+            id: Date.now(),
+            name,
+            description: description || null,
+        };
+        
+        adminState.equipment.push(equipment);
+        return equipment;
+    },
+    
+    /**
+     * Delete equipment.
+     */
+    async deleteEquipment(equipmentId) {
+        console.log('[DEV] Deleting equipment:', equipmentId);
+        await simulateDelay(200);
+        
+        adminState.equipment = adminState.equipment.filter(e => e.id !== equipmentId);
+        adminState.activityEquipment = adminState.activityEquipment.filter(ae => ae.equipment_id !== equipmentId);
+    },
+    
+    /**
+     * Link equipment to an activity.
+     */
+    async addActivityEquipment(activityId, equipmentId, notes) {
+        console.log('[DEV] Linking equipment:', equipmentId, 'to activity:', activityId);
+        await simulateDelay(200);
+        
+        const link = {
+            id: Date.now(),
+            activity_id: activityId,
+            equipment_id: equipmentId,
+            notes: notes || null,
+        };
+        
+        adminState.activityEquipment.push(link);
+        return link;
+    },
+    
+    /**
+     * Remove equipment from an activity.
+     */
+    async removeActivityEquipment(linkId) {
+        console.log('[DEV] Removing activity equipment link:', linkId);
+        await simulateDelay(200);
+        
+        adminState.activityEquipment = adminState.activityEquipment.filter(ae => ae.id !== linkId);
+    },
 };
 
 function simulateDelay(ms) {
@@ -182,6 +244,12 @@ function setupAdminEventListeners() {
     if (adminElements.formPrerequisite) {
         adminElements.formPrerequisite.addEventListener('submit', handleAddPrerequisite);
     }
+    if (adminElements.formEquipment) {
+        adminElements.formEquipment.addEventListener('submit', handleCreateEquipment);
+    }
+    if (adminElements.formActivityEquipment) {
+        adminElements.formActivityEquipment.addEventListener('submit', handleAddActivityEquipment);
+    }
 }
 
 /**
@@ -216,8 +284,11 @@ function refreshAdminLists() {
     renderCategoryList();
     renderActivityList();
     renderPrerequisiteList();
+    renderEquipmentList();
+    renderActivityEquipmentList();
     updateCategorySelects();
     updateActivitySelects();
+    updateEquipmentSelects();
 }
 
 /**
@@ -331,15 +402,90 @@ function updateCategorySelects() {
 function updateActivitySelects() {
     const activitySelect = document.getElementById('prereq-activity');
     const prereqSelect = document.getElementById('prereq-prereq');
-    
-    if (!activitySelect || !prereqSelect) return;
+    const equipActivitySelect = document.getElementById('equip-activity');
     
     const options = adminState.activities
         .map(act => `<option value="${act.id}">${escapeHtml(act.name)}</option>`)
         .join('');
     
-    activitySelect.innerHTML = '<option value="">Select activity...</option>' + options;
-    prereqSelect.innerHTML = '<option value="">Select prerequisite...</option>' + options;
+    if (activitySelect) {
+        activitySelect.innerHTML = '<option value="">Select activity...</option>' + options;
+    }
+    if (prereqSelect) {
+        prereqSelect.innerHTML = '<option value="">Select prerequisite...</option>' + options;
+    }
+    if (equipActivitySelect) {
+        equipActivitySelect.innerHTML = '<option value="">Select activity...</option>' + options;
+    }
+}
+
+/**
+ * Render equipment list.
+ */
+function renderEquipmentList() {
+    const list = adminElements.listEquipment;
+    if (!list) return;
+    
+    if (adminState.equipment.length === 0) {
+        list.innerHTML = '<p class="admin-list__empty">No equipment yet</p>';
+        return;
+    }
+    
+    list.innerHTML = adminState.equipment.map(equip => `
+        <div class="admin-item" data-id="${equip.id}">
+            <div class="admin-item__info">
+                <span class="admin-item__name">🔧 ${escapeHtml(equip.name)}</span>
+                ${equip.description ? `<span class="admin-item__meta">${escapeHtml(equip.description)}</span>` : ''}
+            </div>
+            <button class="admin-item__delete" onclick="window.adminDeleteEquipment(${equip.id})">×</button>
+        </div>
+    `).join('');
+}
+
+/**
+ * Render activity equipment links list.
+ */
+function renderActivityEquipmentList() {
+    const list = adminElements.listActivityEquipment;
+    if (!list) return;
+    
+    if (adminState.activityEquipment.length === 0) {
+        list.innerHTML = '<p class="admin-list__empty">No equipment linked yet</p>';
+        return;
+    }
+    
+    list.innerHTML = adminState.activityEquipment.map(link => {
+        const activity = adminState.activities.find(a => a.id === link.activity_id);
+        const equipment = adminState.equipment.find(e => e.id === link.equipment_id);
+        return `
+            <div class="admin-item" data-id="${link.id}">
+                <div class="admin-item__info">
+                    <span class="admin-item__name">
+                        ${activity ? escapeHtml(activity.name) : 'Unknown'}
+                    </span>
+                    <span class="admin-item__meta">
+                        needs → 🔧 ${equipment ? escapeHtml(equipment.name) : 'Unknown'}
+                        ${link.notes ? `(${escapeHtml(link.notes)})` : ''}
+                    </span>
+                </div>
+                <button class="admin-item__delete" onclick="window.adminRemoveActivityEquipment(${link.id})">×</button>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Update equipment select dropdowns.
+ */
+function updateEquipmentSelects() {
+    const equipSelect = document.getElementById('equip-equipment');
+    if (!equipSelect) return;
+    
+    const options = adminState.equipment
+        .map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`)
+        .join('');
+    
+    equipSelect.innerHTML = '<option value="">Select equipment...</option>' + options;
 }
 
 /**
@@ -437,6 +583,70 @@ async function handleAddPrerequisite(e) {
 }
 
 /**
+ * Handle equipment creation.
+ */
+async function handleCreateEquipment(e) {
+    e.preventDefault();
+    
+    const form = e.target;
+    const formData = new FormData(form);
+    
+    try {
+        await adminClient.createEquipment(
+            formData.get('name'),
+            formData.get('description') || null
+        );
+        
+        form.reset();
+        refreshAdminLists();
+        
+    } catch (error) {
+        showAdminError(error.message);
+    }
+}
+
+/**
+ * Handle linking equipment to activity.
+ */
+async function handleAddActivityEquipment(e) {
+    e.preventDefault();
+    
+    const form = e.target;
+    const formData = new FormData(form);
+    
+    const activityId = parseInt(formData.get('activity_id'));
+    const equipmentId = parseInt(formData.get('equipment_id'));
+    
+    if (!activityId || !equipmentId) {
+        showAdminError('Please select both activity and equipment');
+        return;
+    }
+    
+    // Check if already linked
+    const existing = adminState.activityEquipment.find(
+        ae => ae.activity_id === activityId && ae.equipment_id === equipmentId
+    );
+    if (existing) {
+        showAdminError('Activity already has this equipment');
+        return;
+    }
+    
+    try {
+        await adminClient.addActivityEquipment(
+            activityId,
+            equipmentId,
+            formData.get('notes') || null
+        );
+        
+        form.reset();
+        refreshAdminLists();
+        
+    } catch (error) {
+        showAdminError(error.message);
+    }
+}
+
+/**
  * Show admin error message.
  */
 function showAdminError(message) {
@@ -482,6 +692,23 @@ window.adminDeleteActivity = async function(id) {
 
 window.adminDeletePrerequisite = async function(id) {
     await adminClient.removePrerequisite(id);
+    refreshAdminLists();
+};
+
+window.adminDeleteEquipment = async function(id) {
+    // Check if any activities use this equipment
+    const hasLinks = adminState.activityEquipment.some(ae => ae.equipment_id === id);
+    if (hasLinks) {
+        showAdminError('Cannot delete equipment that is linked to activities');
+        return;
+    }
+    
+    await adminClient.deleteEquipment(id);
+    refreshAdminLists();
+};
+
+window.adminRemoveActivityEquipment = async function(id) {
+    await adminClient.removeActivityEquipment(id);
     refreshAdminLists();
 };
 

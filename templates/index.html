@@ -155,6 +155,7 @@
                 <button class="admin-tab admin-tab--active" data-tab="categories">Categories</button>
                 <button class="admin-tab" data-tab="activities">Skills & Activities</button>
                 <button class="admin-tab" data-tab="prerequisites">Prerequisites</button>
+                <button class="admin-tab" data-tab="equipment">Equipment</button>
             </div>
             
             <div class="admin-content" id="tab-categories">
@@ -233,6 +234,42 @@
                 </form>
                 <div class="admin-list" id="list-prerequisites">
                     <p class="admin-list__empty">No prerequisites yet</p>
+                </div>
+            </div>
+            
+            <div class="admin-content admin-content--hidden" id="tab-equipment">
+                <form class="admin-form" id="form-equipment">
+                    <h3 class="admin-form__title">New Equipment</h3>
+                    <input type="text" name="name" placeholder="Equipment name (e.g., Blindfold)" class="admin-input" required>
+                    <textarea name="description" placeholder="Description (optional)..." class="admin-textarea"></textarea>
+                    <button type="submit" class="admin-btn">Create Equipment</button>
+                </form>
+                <div class="admin-list" id="list-equipment">
+                    <p class="admin-list__empty">No equipment yet</p>
+                </div>
+                
+                <form class="admin-form admin-form--secondary" id="form-activity-equipment">
+                    <h3 class="admin-form__title">Link Equipment to Activity</h3>
+                    <div class="admin-form__row">
+                        <div class="admin-field">
+                            <label class="admin-label">Activity</label>
+                            <select name="activity_id" class="admin-select" id="equip-activity" required>
+                                <option value="">Select activity...</option>
+                            </select>
+                        </div>
+                        <span class="admin-arrow">needs →</span>
+                        <div class="admin-field">
+                            <label class="admin-label">Equipment</label>
+                            <select name="equipment_id" class="admin-select" id="equip-equipment" required>
+                                <option value="">Select equipment...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <input type="text" name="notes" placeholder="Notes (optional, e.g., '2 required')" class="admin-input">
+                    <button type="submit" class="admin-btn">Link Equipment</button>
+                </form>
+                <div class="admin-list" id="list-activity-equipment">
+                    <p class="admin-list__empty">No equipment linked yet</p>
                 </div>
             </div>
             
