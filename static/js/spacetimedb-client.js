@@ -254,12 +254,23 @@ export class SpacetimeDBClient {
     
     /**
      * Join an existing room
+     * Note: This uses the combined sign_in_and_join_room reducer to avoid
+     * CORS issues with token persistence between separate HTTP requests.
      */
-    async joinRoom(roomCode, role) {
-        await this.callReducer('join_room', { 
+    async joinRoom(roomCode, role, username) {
+        // Use combined reducer that handles both sign-in and join atomically
+        await this.callReducer('sign_in_and_join_room', { 
+            username,
             room_code: roomCode, 
             role: { [role]: {} } 
         });
+        
+        // Fetch player data
+        const players = await this.sql(
+            `SELECT * FROM player WHERE username = '${username.replace(/'/g, "''")}'`
+        );
+        
+        const player = players.length > 0 ? players[0] : null;
         
         // Fetch room data
         const rooms = await this.sql(
@@ -273,7 +284,7 @@ export class SpacetimeDBClient {
         const room = rooms[0];
         const members = await this.getRoomMembers(room.id);
         
-        return { room, members };
+        return { player, room, members };
     }
     
     /**

@@ -12,12 +12,13 @@ import { SpacetimeDBClient } from './spacetimedb-client.js';
 // =============================================================================
 
 const CONFIG = {
-    // SpacetimeDB connection settings
+    // SpacetimeDB connection settings (via Pingora proxy)
     spacetimedb: {
-        // Local development
-        host: window.location.hostname === 'localhost' 
-            ? 'http://localhost:3000' 
-            : 'https://spacetimedb.example.com',
+        // Use Pingora proxy which routes /v1/* to SpacetimeDB
+        // In dev: Pingora on 8088, in prod: same origin
+        host: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:8088' 
+            : '', // Same origin in production (Pingora handles routing)
         module: 'damsels',
         pollRate: 2000, // Poll every 2 seconds for room updates
     },
@@ -28,6 +29,8 @@ const CONFIG = {
     },
     // Development mode detection
     isDev: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1',
+    // Pingora proxy port
+    proxyPort: 8088,
 };
 
 // =============================================================================
@@ -344,32 +347,27 @@ class SpacetimeClient {
     }
     
     /**
-     * Register a new player.
+     * Register a new player (just stores username, actual registration happens with room creation).
      */
     async registerPlayer(username) {
-        console.log('Registering player:', username);
+        console.log('Storing username for registration:', username);
         
         if (username.length < 2) {
             throw new Error('Username must be at least 2 characters');
         }
         
-        try {
-            const player = await this.client.registerPlayer(username);
-            
-            state.player = {
-                id: player.id,
-                username: player.username,
-                identity: player.identity,
-                xp: player.xp || 0,
-            };
-            
-            localStorage.setItem(CONFIG.storage.username, username);
-            
-            return state.player;
-        } catch (error) {
-            console.error('Registration failed:', error);
-            throw new Error(error.message || 'Registration failed');
-        }
+        // Just store the username - actual player creation happens in createRoom/joinRoom
+        // This avoids the identity mismatch issue between separate HTTP calls
+        state.player = {
+            id: null, // Will be set after room creation
+            username: username,
+            identity: null,
+            xp: 0,
+        };
+        
+        localStorage.setItem(CONFIG.storage.username, username);
+        
+        return state.player;
     }
     
     /**
@@ -380,6 +378,16 @@ class SpacetimeClient {
         
         try {
             const result = await this.client.signInWithRoom(state.player.username, role);
+            
+            // Update player info from server response
+            if (result.player) {
+                state.player = {
+                    id: result.player.id,
+                    username: result.player.username,
+                    identity: result.player.identity,
+                    xp: result.player.xp || 0,
+                };
+            }
             
             if (result.room) {
                 state.currentRoom = {
@@ -393,7 +401,7 @@ class SpacetimeClient {
             state.roomMembers = result.members || [];
             
             // Start polling for real-time updates
-            if (state.currentRoom) {
+            if (state.currentRoom && state.player) {
                 this.client.startPolling(state.currentRoom.id, state.player.id);
             }
             
@@ -406,12 +414,24 @@ class SpacetimeClient {
     
     /**
      * Join an existing room.
+     * Uses combined sign_in_and_join_room reducer to avoid CORS token issues.
      */
     async joinRoom(roomCode, role) {
         console.log('Joining room:', roomCode, 'with role:', role);
         
         try {
-            const result = await this.client.joinRoom(roomCode, role);
+            // Use combined reducer that handles sign-in + join atomically
+            const result = await this.client.joinRoom(roomCode, role, state.player.username);
+            
+            // Update player info from server response
+            if (result.player) {
+                state.player = {
+                    id: result.player.id,
+                    username: result.player.username,
+                    identity: result.player.identity,
+                    xp: result.player.xp || 0,
+                };
+            }
             
             state.currentRoom = {
                 id: result.room.id,
@@ -423,7 +443,9 @@ class SpacetimeClient {
             state.roomMembers = result.members || [];
             
             // Start polling for real-time updates
-            this.client.startPolling(state.currentRoom.id, state.player.id);
+            if (state.player) {
+                this.client.startPolling(state.currentRoom.id, state.player.id);
+            }
             
             return state.currentRoom;
         } catch (error) {
