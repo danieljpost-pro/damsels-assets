@@ -109,6 +109,10 @@ const elements = {
     lobbyRoomName: document.getElementById('lobby-room-name'),
     lobbyRoomCode: document.getElementById('lobby-room-code'),
     lobbyPlayers: document.getElementById('lobby-players'),
+    lobbyActivities: document.getElementById('lobby-activities'),
+    activitiesCount: document.getElementById('activities-count'),
+    newActivitiesToast: document.getElementById('new-activities-toast'),
+    btnDismissNew: document.getElementById('btn-dismiss-new'),
     btnShareCode: document.getElementById('btn-share-code'),
     btnLeaveRoom: document.getElementById('btn-leave-room'),
     btnLobbyLogout: document.getElementById('btn-lobby-logout'),
@@ -121,6 +125,15 @@ const elements = {
     
     // Connection status
     connectionStatus: document.getElementById('connection-status'),
+    
+    // Debug (dev only)
+    debugActivitiesList: document.getElementById('debug-activities-list'),
+    
+    // Hamburger Menu
+    menuToggle: document.getElementById('menu-toggle'),
+    menuDropdown: document.getElementById('menu-dropdown'),
+    menuLogout: document.getElementById('menu-logout'),
+    themeToggle: document.getElementById('theme-toggle-checkbox'),
 };
 
 // =============================================================================
@@ -165,6 +178,124 @@ function updateConnectionStatus(connected, text = null) {
     statusEl.classList.toggle('connection-status--connected', connected);
     statusEl.classList.toggle('connection-status--disconnected', !connected);
     if (text) statusEl.querySelector('.connection-status__text').textContent = text;
+}
+
+function updateDebugActivities() {
+    const container = elements.debugActivitiesList;
+    if (!container) return; // Not in dev mode
+    
+    const playerId = state.player?.id;
+    const playerXp = state.player?.xp || 0;
+    
+    if (!playerId) {
+        container.innerHTML = '<p class="debug-activities__empty">Select a player to see activities</p>';
+        return;
+    }
+    
+    const activities = client.getAvailableActivities(playerId, playerXp);
+    
+    if (activities.length === 0) {
+        container.innerHTML = '<p class="debug-activities__empty">No available activities (check if activities are seeded)</p>';
+        return;
+    }
+    
+    container.innerHTML = activities.map(activity => {
+        const kindClass = activity.kind === 'Skill' ? 'skill' : 'activity';
+        return `
+            <div class="debug-activities__item">
+                <div>
+                    <span class="debug-activities__name">${escapeHtml(activity.name)}</span>
+                    <span class="debug-activities__category">${escapeHtml(activity.category)}</span>
+                </div>
+                <div>
+                    <span class="debug-activities__kind debug-activities__kind--${kindClass}">${activity.kind}</span>
+                    <span class="debug-activities__xp">+${activity.xpReward} XP</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function updateUnlockedActivitiesUI(allActivities, newActivities) {
+    const container = elements.lobbyActivities;
+    if (!container) return;
+    
+    // Filter to current player's activities
+    const playerId = state.player?.id;
+    const playerActivities = playerId 
+        ? allActivities.filter(a => a.playerId === playerId)
+        : [];
+    
+    // Update count
+    if (elements.activitiesCount) {
+        elements.activitiesCount.textContent = playerActivities.length;
+    }
+    
+    // Show/hide new activities toast
+    const playerNewActivities = playerId
+        ? newActivities.filter(a => a.playerId === playerId)
+        : [];
+    
+    if (playerNewActivities.length > 0 && elements.newActivitiesToast) {
+        elements.newActivitiesToast.classList.remove('hidden');
+        elements.newActivitiesToast.querySelector('.new-activities-toast__text').textContent = 
+            `${playerNewActivities.length} new ${playerNewActivities.length === 1 ? 'activity' : 'activities'} unlocked!`;
+    }
+    
+    if (playerActivities.length === 0) {
+        container.innerHTML = '<p class="lobby__empty">No activities available yet. Complete activities to earn XP and unlock more!</p>';
+        return;
+    }
+    
+    // Group by category
+    const byCategory = {};
+    for (const activity of playerActivities) {
+        const cat = activity.categoryName || 'Unknown';
+        if (!byCategory[cat]) byCategory[cat] = [];
+        byCategory[cat].push(activity);
+    }
+    
+    container.innerHTML = Object.entries(byCategory).map(([category, activities]) => `
+        <div class="activity-category">
+            <h4 class="activity-category__name">${escapeHtml(category)}</h4>
+            <div class="activity-category__list">
+                ${activities.map(activity => {
+                    const isNew = activity.isNew ? 'activity-card--new' : '';
+                    const kindClass = activity.kind === 'Skill' ? 'activity-card--skill' : '';
+                    return `
+                        <div class="activity-card ${isNew} ${kindClass}" data-activity-id="${activity.activityId}">
+                            <div class="activity-card__header">
+                                <span class="activity-card__name">${escapeHtml(activity.activityName)}</span>
+                                <span class="activity-card__kind">${activity.kind}</span>
+                            </div>
+                            <p class="activity-card__desc">${escapeHtml(activity.activityDescription)}</p>
+                            <div class="activity-card__footer">
+                                <span class="activity-card__xp">+${activity.xpReward} XP</span>
+                                ${activity.isNew ? '<span class="activity-card__badge">NEW</span>' : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `).join('');
+}
+
+async function dismissNewActivities() {
+    if (!state.player?.id) return;
+    
+    await client.acknowledgeNewActivities(state.player.id);
+    
+    if (elements.newActivitiesToast) {
+        elements.newActivitiesToast.classList.add('hidden');
+    }
+    
+    // Remove "new" badges from activity cards
+    document.querySelectorAll('.activity-card--new').forEach(card => {
+        card.classList.remove('activity-card--new');
+        const badge = card.querySelector('.activity-card__badge');
+        if (badge) badge.remove();
+    });
 }
 
 function setButtonLoading(button, loading) {
@@ -231,8 +362,11 @@ async function selectPlayer(playerId) {
     localStorage.setItem(CONFIG.storage.playerId, playerId);
     
     if (elements.currentPlayer) {
-        elements.currentPlayer.textContent = `Playing as: ${player.username}`;
+        elements.currentPlayer.innerHTML = `Playing as: <strong>${player.username}</strong> <span class="player-xp">(${player.xp} XP)</span>`;
     }
+    
+    // Update debug activities panel
+    updateDebugActivities();
     
     showStep('room');
 }
@@ -269,7 +403,7 @@ function renderRoomMembers() {
     }).join('');
 }
 
-function showLobby() {
+async function showLobby() {
     if (elements.lobbyRoomName) elements.lobbyRoomName.textContent = state.currentRoom?.name || 'Room';
     if (elements.lobbyRoomCode) elements.lobbyRoomCode.textContent = state.currentRoom?.code || '?????';
     
@@ -278,6 +412,25 @@ function showLobby() {
     
     renderRoomMembers();
     showStep('lobby');
+    
+    // Load activities (async, will update UI when ready)
+    await renderUnlockedActivities();
+}
+
+async function renderUnlockedActivities() {
+    if (!state.player?.id) return;
+    
+    // First try the cache
+    let activities = client.getUnlockedActivities(state.player.id);
+    
+    // If cache is empty, query directly (handles race condition after room join)
+    if (activities.length === 0) {
+        console.log('[App] Cache empty, querying unlocked activities directly');
+        activities = await client.queryUnlockedActivities(state.player.id);
+    }
+    
+    const newActivities = activities.filter(a => a.isNew);
+    updateUnlockedActivitiesUI(activities, newActivities);
 }
 
 // =============================================================================
@@ -297,20 +450,21 @@ async function handleLogin(e) {
     setButtonLoading(e.target.querySelector('[data-action="login"]'), true);
     clearError(elements.loginError);
     
-    try {
-        await client.loginUser(username, password);
-        state.user = { username };
-        localStorage.setItem(CONFIG.storage.username, username);
-        
-        if (elements.currentUser) elements.currentUser.textContent = `Welcome, ${username}`;
-        
-        await loadPlayers();
-        showStep('player');
-    } catch (error) {
-        showError(elements.loginError, error.message || 'Login failed');
-    } finally {
-        setButtonLoading(e.target.querySelector('[data-action="login"]'), false);
+    const result = await client.loginUser(username, password);
+    setButtonLoading(e.target.querySelector('[data-action="login"]'), false);
+    
+    if (!result.ok) {
+        showError(elements.loginError, result.error || 'Login failed');
+        return;
     }
+    
+    state.user = { username };
+    localStorage.setItem(CONFIG.storage.username, username);
+    
+    if (elements.currentUser) elements.currentUser.textContent = `Welcome, ${username}`;
+    
+    await loadPlayers();
+    showStep('player');
 }
 
 async function handleRegister() {
@@ -330,20 +484,21 @@ async function handleRegister() {
     setButtonLoading(elements.btnRegister, true);
     clearError(elements.loginError);
     
-    try {
-        await client.registerUser(username, password);
-        state.user = { username };
-        localStorage.setItem(CONFIG.storage.username, username);
-        
-        if (elements.currentUser) elements.currentUser.textContent = `Welcome, ${username}`;
-        
-        await loadPlayers();
-        showStep('player');
-    } catch (error) {
-        showError(elements.loginError, error.message || 'Registration failed');
-    } finally {
-        setButtonLoading(elements.btnRegister, false);
+    const result = await client.registerUser(username, password);
+    setButtonLoading(elements.btnRegister, false);
+    
+    if (!result.ok) {
+        showError(elements.loginError, result.error || 'Registration failed');
+        return;
     }
+    
+    state.user = { username };
+    localStorage.setItem(CONFIG.storage.username, username);
+    
+    if (elements.currentUser) elements.currentUser.textContent = `Welcome, ${username}`;
+    
+    await loadPlayers();
+    showStep('player');
 }
 
 async function handleLogout() {
@@ -379,13 +534,14 @@ async function handleCreatePlayer(e) {
     
     clearError(elements.playerError);
     
-    try {
-        await client.createPlayer(playerName);
-        elements.playerNameInput.value = '';
-        await loadPlayers();
-    } catch (error) {
-        showError(elements.playerError, error.message || 'Failed to create player');
+    const result = await client.createPlayer(playerName);
+    if (!result.ok) {
+        showError(elements.playerError, result.error || 'Failed to create player');
+        return;
     }
+    
+    elements.playerNameInput.value = '';
+    await loadPlayers();
 }
 
 function handleCreateRoomClick() {
@@ -445,61 +601,65 @@ async function handleRoleSelect(e) {
     clearError(elements.roleError);
     setButtonLoading(card, true);
     
-    try {
-        if (state.pendingAction === 'create') {
-            const result = await client.createRoom(state.player.id, state.pendingRoomName, role);
-            state.currentRoom = result.room;
-            state.currentRole = role;
-            state.roomMembers = result.members || [];
-        } else if (state.pendingAction === 'join') {
-            const result = await client.joinRoom(state.player.id, state.pendingRoomCode, role);
-            state.currentRoom = result.room;
-            state.currentRole = role;
-            state.roomMembers = result.members || [];
-        } else if (state.pendingAction === 'invitation') {
-            const result = await client.acceptInvitation(state.player.id, state.invitationToken, role);
-            state.currentRoom = result.room;
-            state.currentRole = role;
-            state.roomMembers = result.members || [];
-        }
-        
-        showLobby();
-    } catch (error) {
-        showError(elements.roleError, error.message || 'Failed to proceed');
-    } finally {
-        setButtonLoading(card, false);
+    let result;
+    if (state.pendingAction === 'create') {
+        result = await client.createRoom(state.player.id, state.pendingRoomName, role);
+    } else if (state.pendingAction === 'join') {
+        result = await client.joinRoom(state.player.id, state.pendingRoomCode, role);
+    } else if (state.pendingAction === 'invitation') {
+        result = await client.acceptInvitation(state.player.id, state.invitationToken, role);
     }
+    
+    setButtonLoading(card, false);
+    
+    if (!result?.ok) {
+        showError(elements.roleError, result?.error || 'Failed to proceed');
+        return;
+    }
+    
+    state.currentRoom = result.room;
+    state.currentRole = role;
+    state.roomMembers = result.members || [];
+    
+    // Initialize unlocked activities for this player
+    if (state.player?.id) {
+        await client.initializeUnlockedActivities(state.player.id);
+    }
+    
+    showLobby();
 }
 
 async function handleLeaveRoom() {
     if (!state.currentRoom || !state.player) return;
     
-    try {
-        await client.leaveRoom(state.player.id);
-        state.currentRoom = null;
-        state.currentRole = null;
-        state.roomMembers = [];
-        showStep('room');
-    } catch (error) {
-        console.error('Failed to leave room:', error);
+    const result = await client.leaveRoom(state.player.id, state.currentRoom.id);
+    if (!result.ok) {
+        console.error('Failed to leave room:', result.error);
+        return;
     }
+    
+    state.currentRoom = null;
+    state.currentRole = null;
+    state.roomMembers = [];
+    showStep('room');
 }
 
 async function handleCreateInvitation() {
     if (!state.currentRoom || !state.player) return;
     
-    try {
-        await client.createRoomInvitation(state.player.id);
-        // The invitation will appear in the table; we need to query for it
-        // For now, show a success message
-        if (elements.inviteResult) {
-            elements.inviteResult.classList.remove('hidden');
-            if (elements.inviteTokenDisplay) {
-                elements.inviteTokenDisplay.value = 'Check room_invitation table';
-            }
+    const result = await client.createRoomInvitation(state.player.id, state.currentRoom.id);
+    if (!result.ok) {
+        alert('Failed to create invitation: ' + result.error);
+        return;
+    }
+    
+    // The invitation will appear in the table; we need to query for it
+    // For now, show a success message
+    if (elements.inviteResult) {
+        elements.inviteResult.classList.remove('hidden');
+        if (elements.inviteTokenDisplay) {
+            elements.inviteTokenDisplay.value = 'Check room_invitation table';
         }
-    } catch (error) {
-        alert('Failed to create invitation: ' + error.message);
     }
 }
 
@@ -507,15 +667,16 @@ async function handleCloseRoom() {
     if (!state.currentRoom || !state.player) return;
     if (!confirm('Close this room? All players will be removed.')) return;
     
-    try {
-        await client.closeRoom(state.player.id);
-        state.currentRoom = null;
-        state.currentRole = null;
-        state.roomMembers = [];
-        showStep('room');
-    } catch (error) {
-        alert('Failed to close room: ' + error.message);
+    const result = await client.closeRoom(state.player.id, state.currentRoom.id);
+    if (!result.ok) {
+        alert('Failed to close room: ' + result.error);
+        return;
     }
+    
+    state.currentRoom = null;
+    state.currentRole = null;
+    state.roomMembers = [];
+    showStep('room');
 }
 
 async function copyRoomCode() {
@@ -575,6 +736,15 @@ async function init() {
             updateConnectionStatus(false, 'Error');
         };
         
+        client.onActivitiesUpdate = () => {
+            updateDebugActivities();
+        };
+        
+        client.onUnlockedActivitiesUpdate = ({ all, new: newActivities }) => {
+            console.log('[App] Unlocked activities update:', all.length, 'total,', newActivities.length, 'new');
+            updateUnlockedActivitiesUI(all, newActivities);
+        };
+        
         await client.connect();
         
         // Pre-fill username if stored
@@ -628,6 +798,54 @@ function setupEventListeners() {
     elements.btnCreateInvite?.addEventListener('click', handleCreateInvitation);
     elements.btnCopyInvite?.addEventListener('click', copyInvitation);
     elements.btnCloseRoom?.addEventListener('click', handleCloseRoom);
+    elements.btnDismissNew?.addEventListener('click', dismissNewActivities);
+    
+    // Hamburger Menu
+    elements.menuToggle?.addEventListener('click', toggleMenu);
+    elements.menuLogout?.addEventListener('click', () => {
+        closeMenu();
+        handleLogout();
+    });
+    elements.themeToggle?.addEventListener('change', toggleTheme);
+    
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.hamburger-menu')) {
+            closeMenu();
+        }
+    });
+    
+    // Initialize theme from localStorage
+    initTheme();
+}
+
+// =============================================================================
+// Hamburger Menu & Theme
+// =============================================================================
+
+function toggleMenu() {
+    elements.menuDropdown?.classList.toggle('hidden');
+}
+
+function closeMenu() {
+    elements.menuDropdown?.classList.add('hidden');
+}
+
+function toggleTheme() {
+    const isDark = !elements.themeToggle?.checked;
+    document.body.classList.toggle('light-mode', !isDark);
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+}
+
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+    const isLight = savedTheme ? savedTheme === 'light' : !prefersDark;
+    
+    document.body.classList.toggle('light-mode', isLight);
+    if (elements.themeToggle) {
+        elements.themeToggle.checked = !isLight; // Checkbox checked = dark mode
+    }
 }
 
 /**

@@ -15,6 +15,14 @@ $color-accent-glow: rgba(201, 162, 39, 0.15);
 $color-error: #b35252;
 $color-success: #4a9e6a;
 
+// Light mode colors
+$light-bg: #f5f3f0;
+$light-surface: #ffffff;
+$light-surface-elevated: #fafafa;
+$light-border: #d4d4d4;
+$light-text: #1a1a1f;
+$light-text-muted: #6a6a7a;
+
 $font-display: 'Cormorant Garamond', Georgia, serif;
 $font-mono: 'Fira Code', 'Consolas', monospace;
 
@@ -49,6 +57,167 @@ body {
         radial-gradient(ellipse at 50% 0%, rgba($color-accent, 0.08) 0%, transparent 60%),
         linear-gradient(180deg, $color-bg 0%, darken($color-bg, 2%) 100%);
     min-height: 100vh;
+    transition: background-color $transition, color $transition;
+}
+
+// Light Mode
+body.light-mode {
+    color: $light-text;
+    background-color: $light-bg;
+    background-image: 
+        radial-gradient(ellipse at 50% 0%, rgba($color-accent, 0.1) 0%, transparent 60%),
+        linear-gradient(180deg, $light-bg 0%, darken($light-bg, 2%) 100%);
+    
+    .login-form__input,
+    .player-form__input,
+    .room-form__input {
+        background-color: $light-surface;
+        border-color: $light-border;
+        color: $light-text;
+    }
+    
+    .step, .lobby, .admin-panel {
+        background-color: rgba($light-surface, 0.8);
+    }
+    
+    .role-card {
+        background-color: $light-surface;
+        border-color: $light-border;
+    }
+    
+    .hamburger-menu__dropdown {
+        background-color: $light-surface;
+        border-color: $light-border;
+    }
+    
+    .hamburger-menu__bar {
+        background-color: $light-text;
+    }
+}
+
+// =============================================================================
+// Hamburger Menu
+// =============================================================================
+
+.hamburger-menu {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 1000;
+}
+
+.hamburger-menu__toggle {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    width: 2rem;
+    height: 2rem;
+    padding: 0.25rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    
+    &:hover .hamburger-menu__bar {
+        background-color: $color-accent;
+    }
+}
+
+.hamburger-menu__bar {
+    width: 100%;
+    height: 2px;
+    background-color: $color-text;
+    border-radius: 2px;
+    transition: background-color $transition;
+}
+
+.hamburger-menu__dropdown {
+    position: absolute;
+    top: 2.5rem;
+    right: 0;
+    min-width: 180px;
+    background-color: $color-surface-elevated;
+    border: 1px solid $color-border;
+    border-radius: $radius-lg;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    
+    &.hidden {
+        display: none;
+    }
+}
+
+.hamburger-menu__item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: transparent;
+    border: none;
+    color: $color-text;
+    font-family: $font-mono;
+    font-size: 0.875rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color $transition;
+    
+    &:hover {
+        background-color: rgba($color-accent, 0.1);
+    }
+}
+
+.hamburger-menu__logout {
+    border-top: 1px solid $color-border;
+    color: $color-error;
+    
+    &:hover {
+        background-color: rgba($color-error, 0.1);
+    }
+}
+
+// Theme Toggle Switch
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    
+    input {
+        display: none;
+    }
+}
+
+.theme-toggle__slider {
+    position: relative;
+    width: 40px;
+    height: 20px;
+    background-color: $color-border;
+    border-radius: 20px;
+    transition: background-color $transition;
+    
+    &::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        background-color: $color-text;
+        border-radius: 50%;
+        transition: transform $transition;
+    }
+    
+    input:checked + & {
+        background-color: $color-accent;
+        
+        &::after {
+            transform: translateX(20px);
+        }
+    }
+}
+
+.theme-toggle__label {
+    color: $color-text-muted;
+    font-size: 0.8rem;
 }
 
 // Welcome Page
@@ -995,6 +1164,266 @@ body {
 }
 
 // =============================================================================
+// Debug Activities Panel (DEV ONLY)
+// =============================================================================
+
+.debug-activities {
+    margin-top: 2rem;
+    padding: 1rem;
+    background: rgba($color-accent, 0.1);
+    border: 1px dashed $color-accent;
+    border-radius: 8px;
+    
+    &__title {
+        font-family: $font-display;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: $color-accent;
+        cursor: pointer;
+        padding: 0.5rem 0;
+        
+        &:hover {
+            color: lighten($color-accent, 10%);
+        }
+    }
+    
+    &__list {
+        margin-top: 0.75rem;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    &__empty {
+        color: rgba($color-text, 0.5);
+        font-size: 0.875rem;
+        font-style: italic;
+    }
+    
+    &__item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0.75rem;
+        margin-bottom: 0.5rem;
+        background: rgba($color-bg, 0.5);
+        border-radius: 4px;
+        font-size: 0.8rem;
+        
+        &:last-child {
+            margin-bottom: 0;
+        }
+    }
+    
+    &__name {
+        font-weight: 500;
+        color: $color-text;
+    }
+    
+    &__category {
+        color: rgba($color-text, 0.6);
+        font-size: 0.75rem;
+    }
+    
+    &__kind {
+        padding: 0.125rem 0.375rem;
+        border-radius: 3px;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        
+        &--skill {
+            background: rgba($color-success, 0.3);
+            color: $color-success;
+        }
+        
+        &--activity {
+            background: rgba($color-accent, 0.3);
+            color: $color-accent;
+        }
+    }
+    
+    &__xp {
+        color: rgba($color-text, 0.5);
+        font-size: 0.7rem;
+    }
+}
+
+// =============================================================================
+// Lobby Activities
+// =============================================================================
+
+.lobby__section {
+    margin-top: 1.5rem;
+}
+
+.lobby__count {
+    background: rgba($color-accent, 0.3);
+    color: $color-accent;
+    font-size: 0.75rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 10px;
+    margin-left: 0.5rem;
+}
+
+.lobby__activities {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.lobby__empty {
+    color: rgba($color-text, 0.5);
+    font-size: 0.875rem;
+    font-style: italic;
+    text-align: center;
+    padding: 1rem;
+}
+
+// New Activities Toast
+.new-activities-toast {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, rgba($color-success, 0.2), rgba($color-accent, 0.2));
+    border: 1px solid rgba($color-success, 0.5);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    animation: toast-pulse 2s infinite;
+    
+    &__icon {
+        font-size: 1.25rem;
+    }
+    
+    &__text {
+        flex: 1;
+        font-size: 0.875rem;
+        color: $color-text;
+    }
+    
+    &__dismiss {
+        background: none;
+        border: none;
+        color: rgba($color-text, 0.5);
+        cursor: pointer;
+        font-size: 1.25rem;
+        padding: 0;
+        
+        &:hover {
+            color: $color-text;
+        }
+    }
+}
+
+@keyframes toast-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+// Activity Category
+.activity-category {
+    &__name {
+        font-family: $font-display;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: rgba($color-text, 0.7);
+        margin: 0 0 0.5rem 0;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    &__list {
+        display: grid;
+        gap: 0.75rem;
+    }
+}
+
+// Activity Card
+.activity-card {
+    background: rgba($color-surface, 0.5);
+    border: 1px solid rgba($color-text, 0.1);
+    border-radius: 8px;
+    padding: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    
+    &:hover {
+        background: rgba($color-surface, 0.8);
+        border-color: rgba($color-accent, 0.3);
+        transform: translateY(-1px);
+    }
+    
+    &--new {
+        border-color: rgba($color-success, 0.5);
+        background: linear-gradient(135deg, rgba($color-surface, 0.5), rgba($color-success, 0.1));
+        
+        &:hover {
+            border-color: $color-success;
+        }
+    }
+    
+    &--skill {
+        border-left: 3px solid $color-success;
+    }
+    
+    &__header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.5rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    &__name {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: $color-text;
+    }
+    
+    &__kind {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        padding: 0.125rem 0.375rem;
+        border-radius: 3px;
+        background: rgba($color-accent, 0.2);
+        color: $color-accent;
+    }
+    
+    &__desc {
+        font-size: 0.8rem;
+        color: rgba($color-text, 0.7);
+        margin: 0.25rem 0;
+        line-height: 1.4;
+    }
+    
+    &__footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 0.5rem;
+    }
+    
+    &__xp {
+        font-size: 0.75rem;
+        color: $color-success;
+        font-weight: 500;
+    }
+    
+    &__badge {
+        font-size: 0.6rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        padding: 0.125rem 0.375rem;
+        border-radius: 3px;
+        background: $color-success;
+        color: $color-bg;
+        letter-spacing: 0.05em;
+    }
+}
+
+// =============================================================================
 // Admin Panel
 // =============================================================================
 
@@ -1458,6 +1887,12 @@ body {
 .room-header__player {
     font-size: 0.875rem;
     color: $color-accent;
+}
+
+.player-xp {
+    color: $color-success;
+    font-weight: 500;
+    font-size: 0.8em;
 }
 
 .room-header__back {

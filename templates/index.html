@@ -3,6 +3,28 @@
 {% block title %}{{ config.title }} - Enter the Realm{% endblock %}
 
 {% block content %}
+<!-- Hamburger Menu -->
+<nav class="hamburger-menu">
+    <button class="hamburger-menu__toggle" id="menu-toggle" aria-label="Toggle menu">
+        <span class="hamburger-menu__bar"></span>
+        <span class="hamburger-menu__bar"></span>
+        <span class="hamburger-menu__bar"></span>
+    </button>
+    
+    <div class="hamburger-menu__dropdown hidden" id="menu-dropdown">
+        <div class="hamburger-menu__item">
+            <label class="theme-toggle">
+                <input type="checkbox" id="theme-toggle-checkbox">
+                <span class="theme-toggle__slider"></span>
+                <span class="theme-toggle__label">Dark Mode</span>
+            </label>
+        </div>
+        <button class="hamburger-menu__item hamburger-menu__logout" id="menu-logout">
+            🚪 Log Out
+        </button>
+    </div>
+</nav>
+
 <main class="welcome">
     <div class="welcome__container">
         <h1 class="welcome__title">{{ config.title }}</h1>
@@ -244,6 +266,25 @@
                     <!-- Players will be inserted here -->
                 </div>
                 
+                <!-- Available Activities -->
+                <div class="lobby__section">
+                    <div class="lobby__info">
+                        <span class="lobby__label">Available Activities</span>
+                        <span class="lobby__count" id="activities-count">0</span>
+                    </div>
+                    
+                    <!-- New Activities Toast -->
+                    <div class="new-activities-toast hidden" id="new-activities-toast">
+                        <span class="new-activities-toast__icon">✨</span>
+                        <span class="new-activities-toast__text">New activities unlocked!</span>
+                        <button class="new-activities-toast__dismiss" id="btn-dismiss-new">×</button>
+                    </div>
+                    
+                    <div class="lobby__activities" id="lobby-activities">
+                        <p class="lobby__empty">Loading activities...</p>
+                    </div>
+                </div>
+                
                 <!-- Owner Controls (shown only to room owner) -->
                 <div class="lobby__owner-controls hidden" id="owner-controls">
                     <h3 class="owner-controls__title">Room Owner Controls</h3>
@@ -267,6 +308,18 @@
                     <button class="lobby__leave" id="btn-leave-room">Leave Room</button>
                     <button class="lobby__logout" id="btn-lobby-logout">Logout</button>
                 </div>
+                
+                {# DEV ONLY: Available Activities Debug Panel #}
+                {% if config.extra.dev_mode %}
+                <div class="debug-activities">
+                    <details open>
+                        <summary class="debug-activities__title">🐛 Debug: Available Activities</summary>
+                        <div class="debug-activities__list" id="debug-activities-list">
+                            <p class="debug-activities__empty">No activities loaded</p>
+                        </div>
+                    </details>
+                </div>
+                {% endif %}
             </div>
         </section>
         
