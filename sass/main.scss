@@ -702,6 +702,13 @@ body {
     margin-top: 1rem;
 }
 
+.lobby__actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
 .lobby__leave {
     padding: 0.75rem 1.5rem;
     font-family: $font-mono;
@@ -719,6 +726,242 @@ body {
         color: $color-error;
         border-color: $color-error;
     }
+}
+
+.lobby__logout {
+    padding: 0.75rem 1.5rem;
+    font-family: $font-mono;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+    background-color: transparent;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: all $transition;
+    
+    &:hover {
+        color: $color-accent;
+        border-color: $color-accent;
+    }
+}
+
+.lobby__room-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.lobby__name {
+    font-family: $font-display;
+    font-size: 1.25rem;
+    color: $color-text;
+    letter-spacing: 0.05em;
+}
+
+// =============================================================================
+// Invitation Banner & Section
+// =============================================================================
+
+.invitation-banner {
+    margin-top: 2rem;
+    padding: 1rem 1.5rem;
+    background: linear-gradient(135deg, rgba($color-accent, 0.15), rgba($color-accent, 0.05));
+    border: 1px solid rgba($color-accent, 0.3);
+    border-radius: $radius-lg;
+    text-align: center;
+    animation: pulseGlow 2s ease-in-out infinite;
+    
+    &.hidden {
+        display: none;
+    }
+}
+
+@keyframes pulseGlow {
+    0%, 100% {
+        box-shadow: 0 0 10px $color-accent-glow;
+    }
+    50% {
+        box-shadow: 0 0 20px $color-accent-glow, 0 0 30px rgba($color-accent, 0.1);
+    }
+}
+
+.invitation-banner__text {
+    display: block;
+    font-family: $font-display;
+    font-size: 1.125rem;
+    color: $color-accent;
+    margin-bottom: 0.25rem;
+}
+
+.invitation-banner__hint {
+    font-size: 0.625rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+}
+
+.invitation-section {
+    margin-bottom: 1.5rem;
+    
+    &.hidden {
+        display: none;
+    }
+}
+
+// =============================================================================
+// Owner Controls
+// =============================================================================
+
+.owner-controls {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background-color: $color-surface;
+    border: 1px solid $color-border;
+    border-radius: $radius-lg;
+    
+    &.hidden {
+        display: none;
+    }
+}
+
+.owner-controls__title {
+    font-family: $font-display;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+    margin: 0 0 1rem 0;
+    text-align: center;
+}
+
+.owner-controls__invite {
+    margin-bottom: 1rem;
+}
+
+.owner-controls__btn {
+    width: 100%;
+    padding: 0.75rem 1.5rem;
+    font-family: $font-mono;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: $color-text;
+    background-color: $color-surface-elevated;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: all $transition;
+    
+    &:hover {
+        border-color: $color-accent;
+        background-color: $color-bg;
+    }
+    
+    &--danger {
+        color: $color-text-muted;
+        
+        &:hover {
+            color: $color-error;
+            border-color: $color-error;
+            background-color: rgba($color-error, 0.1);
+        }
+    }
+}
+
+.invite-result {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    
+    &.hidden {
+        display: none;
+    }
+}
+
+.invite-token {
+    flex: 1;
+    padding: 0.625rem 0.75rem;
+    font-family: $font-mono;
+    font-size: 0.75rem;
+    color: $color-accent;
+    background-color: $color-bg;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    outline: none;
+}
+
+.btn-copy {
+    padding: 0.625rem 1rem;
+    font-family: $font-mono;
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: $color-bg;
+    background-color: $color-accent;
+    border: none;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: background-color $transition;
+    
+    &:hover {
+        background-color: $color-accent-hover;
+    }
+}
+
+// =============================================================================
+// Form Actions (Create Room)
+// =============================================================================
+
+.form-title {
+    font-family: $font-display;
+    font-size: 1.5rem;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+    color: $color-text;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.btn-secondary {
+    flex: 1;
+    padding: 1rem 1.5rem;
+    font-family: $font-mono;
+    font-size: 0.8125rem;
+    letter-spacing: 0.1em;
+    color: $color-text-muted;
+    background-color: transparent;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: all $transition;
+    
+    &:hover {
+        color: $color-text;
+        border-color: $color-text-muted;
+    }
+}
+
+.form-actions .login-form__submit {
+    flex: 2;
+    margin-top: 0;
+}
+
+// =============================================================================
+// Utility Classes
+// =============================================================================
+
+.hidden {
+    display: none !important;
 }
 
 // =============================================================================
@@ -1051,6 +1294,185 @@ body {
     &:hover {
         color: $color-error;
         background-color: rgba($color-error, 0.1);
+    }
+}
+
+// =============================================================================
+// Login Form Buttons (Login + Register)
+// =============================================================================
+
+.login-form__buttons {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.5rem;
+}
+
+.login-form__register {
+    padding: 1rem 1.5rem;
+    font-family: $font-display;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: $color-text;
+    background-color: transparent;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: background-color $transition, border-color $transition;
+
+    &:hover {
+        background-color: $color-surface;
+        border-color: $color-accent;
+    }
+}
+
+// =============================================================================
+// Player Selection Screen
+// =============================================================================
+
+.player-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid $color-border;
+}
+
+.player-header__user {
+    font-size: 0.875rem;
+    color: $color-text-muted;
+}
+
+.player-header__logout {
+    font-size: 0.75rem;
+    padding: 0.5rem 1rem;
+    color: $color-text-muted;
+    background: transparent;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: color $transition, border-color $transition;
+
+    &:hover {
+        color: $color-error;
+        border-color: $color-error;
+    }
+}
+
+.step-title {
+    font-family: $font-display;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: $color-text;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.player-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+}
+
+.player-list__empty {
+    text-align: center;
+    font-size: 0.875rem;
+    color: $color-text-muted;
+    padding: 2rem;
+    background-color: $color-surface;
+    border-radius: $radius;
+}
+
+.player-card--selectable {
+    width: 100%;
+    cursor: pointer;
+    transition: border-color $transition, transform $transition;
+    border: 1px solid $color-border;
+
+    &:hover {
+        border-color: $color-accent;
+        transform: translateX(4px);
+    }
+}
+
+.player-card__xp {
+    display: block;
+    font-size: 0.625rem;
+    color: $color-accent;
+    letter-spacing: 0.05em;
+}
+
+.player-create {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid $color-border;
+}
+
+.player-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.player-form__field {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.player-form__submit {
+    padding: 0.75rem 1.25rem;
+    font-family: $font-display;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: $color-bg;
+    background-color: $color-accent;
+    border: none;
+    border-radius: $radius;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color $transition;
+
+    &:hover {
+        background-color: lighten($color-accent, 5%);
+    }
+}
+
+// =============================================================================
+// Room Header
+// =============================================================================
+
+.room-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid $color-border;
+}
+
+.room-header__player {
+    font-size: 0.875rem;
+    color: $color-accent;
+}
+
+.room-header__back {
+    font-size: 0.75rem;
+    padding: 0.5rem 1rem;
+    color: $color-text-muted;
+    background: transparent;
+    border: 1px solid $color-border;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: color $transition, border-color $transition;
+
+    &:hover {
+        color: $color-text;
+        border-color: $color-text-muted;
     }
 }
 

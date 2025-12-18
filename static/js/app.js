@@ -2,7 +2,7 @@
  * Damsels - Client Application
  * 
  * Handles connection to SpacetimeDB and UI state management
- * for login, room creation/joining, and role selection.
+ * for login, player selection, room creation/joining, and role selection.
  */
 
 import { SpacetimeDBClient } from './spacetimedb-client.js';
@@ -12,25 +12,20 @@ import { SpacetimeDBClient } from './spacetimedb-client.js';
 // =============================================================================
 
 const CONFIG = {
-    // SpacetimeDB connection settings (via Pingora proxy)
     spacetimedb: {
-        // Use Pingora proxy which routes /v1/* to SpacetimeDB
-        // In dev: Pingora on 8088, in prod: same origin
         host: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? 'http://localhost:8088' 
-            : '', // Same origin in production (Pingora handles routing)
+            : '',
+        wsHost: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'ws://localhost:3000'
+            : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`,
         module: 'damsels',
-        pollRate: 2000, // Poll every 2 seconds for room updates
     },
-    // Local storage keys
     storage: {
-        identity: 'damsels_identity',
         username: 'damsels_username',
+        playerId: 'damsels_player_id',
     },
-    // Development mode detection
     isDev: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1',
-    // Pingora proxy port
-    proxyPort: 8088,
 };
 
 // =============================================================================
@@ -40,12 +35,22 @@ const CONFIG = {
 const state = {
     connected: false,
     identity: null,
+    // User (authenticated account)
+    user: null,
+    // Selected Player identity
     player: null,
+    // Available players for this user
+    players: [],
+    // Current room
     currentRoom: null,
     currentRole: null,
-    currentStep: 'login',
-    // Room members (populated by SpacetimeDB subscription in production)
     roomMembers: [],
+    // UI state
+    currentStep: 'login',
+    pendingAction: null,
+    pendingRoomCode: null,
+    pendingRoomName: null,
+    invitationToken: null,
 };
 
 // =============================================================================
@@ -55,7 +60,9 @@ const state = {
 const elements = {
     // Steps
     stepLogin: document.getElementById('step-login'),
+    stepPlayer: document.getElementById('step-player'),
     stepRoom: document.getElementById('step-room'),
+    stepCreateRoom: document.getElementById('step-create-room'),
     stepRole: document.getElementById('step-role'),
     stepLobby: document.getElementById('step-lobby'),
     stepAdmin: document.getElementById('step-admin'),
@@ -63,14 +70,35 @@ const elements = {
     // Login form
     loginForm: document.getElementById('login-form'),
     usernameInput: document.getElementById('username'),
+    passwordInput: document.getElementById('password'),
     loginError: document.getElementById('login-error'),
+    btnRegister: document.getElementById('btn-register'),
+    
+    // Player selection
+    currentUser: document.getElementById('current-user'),
+    btnLogout: document.getElementById('btn-logout'),
+    playerList: document.getElementById('player-list'),
+    playerForm: document.getElementById('player-form'),
+    playerNameInput: document.getElementById('player-name'),
+    playerError: document.getElementById('player-error'),
     
     // Room selection
-    playerGreeting: document.getElementById('player-greeting'),
+    currentPlayer: document.getElementById('current-player'),
+    btnBackPlayer: document.getElementById('btn-back-player'),
+    invitationSection: document.getElementById('invitation-section'),
+    invitationForm: document.getElementById('invitation-form'),
+    invitationTokenInput: document.getElementById('invitation-token'),
+    invitationError: document.getElementById('invitation-error'),
     btnCreateRoom: document.getElementById('btn-create-room'),
     joinForm: document.getElementById('join-form'),
     roomCodeInput: document.getElementById('room-code'),
     joinError: document.getElementById('join-error'),
+    
+    // Room creation
+    createRoomForm: document.getElementById('create-room-form'),
+    roomNameInput: document.getElementById('room-name'),
+    createRoomError: document.getElementById('create-room-error'),
+    btnBackRoom: document.getElementById('btn-back-room'),
     
     // Role selection
     currentRoomCode: document.getElementById('current-room-code'),
@@ -78,109 +106,147 @@ const elements = {
     roleError: document.getElementById('role-error'),
     
     // Lobby
+    lobbyRoomName: document.getElementById('lobby-room-name'),
     lobbyRoomCode: document.getElementById('lobby-room-code'),
     lobbyPlayers: document.getElementById('lobby-players'),
     btnShareCode: document.getElementById('btn-share-code'),
     btnLeaveRoom: document.getElementById('btn-leave-room'),
+    btnLobbyLogout: document.getElementById('btn-lobby-logout'),
+    ownerControls: document.getElementById('owner-controls'),
+    btnCreateInvite: document.getElementById('btn-create-invite'),
+    inviteResult: document.getElementById('invite-result'),
+    inviteTokenDisplay: document.getElementById('invite-token-display'),
+    btnCopyInvite: document.getElementById('btn-copy-invite'),
+    btnCloseRoom: document.getElementById('btn-close-room'),
     
     // Connection status
     connectionStatus: document.getElementById('connection-status'),
 };
 
 // =============================================================================
+// SpacetimeDB Client
+// =============================================================================
+
+const client = new SpacetimeDBClient(CONFIG.spacetimedb);
+
+// =============================================================================
 // UI Helpers
 // =============================================================================
 
-/**
- * Show a specific step and hide others.
- * Exported to window for admin.js to use.
- */
 function showStep(stepName) {
     state.currentStep = stepName;
     
     elements.stepLogin?.classList.toggle('step--active', stepName === 'login');
+    elements.stepPlayer?.classList.toggle('step--active', stepName === 'player');
     elements.stepRoom?.classList.toggle('step--active', stepName === 'room');
+    elements.stepCreateRoom?.classList.toggle('step--active', stepName === 'create-room');
     elements.stepRole?.classList.toggle('step--active', stepName === 'role');
     elements.stepLobby?.classList.toggle('step--active', stepName === 'lobby');
     elements.stepAdmin?.classList.toggle('step--active', stepName === 'admin');
 }
 window.showStep = showStep;
 
-/**
- * Display an error message in the specified container.
- */
 function showError(element, message) {
+    if (!element) return;
     element.textContent = message;
     element.classList.add('login-form__error--visible');
-    
-    // Auto-hide after 5 seconds
-    setTimeout(() => {
-        element.classList.remove('login-form__error--visible');
-    }, 5000);
+    setTimeout(() => element.classList.remove('login-form__error--visible'), 5000);
 }
 
-/**
- * Clear error message from container.
- */
 function clearError(element) {
+    if (!element) return;
     element.textContent = '';
     element.classList.remove('login-form__error--visible');
 }
 
-/**
- * Update connection status indicator.
- */
 function updateConnectionStatus(connected, text = null) {
     const statusEl = elements.connectionStatus;
     if (!statusEl) return;
-    
     statusEl.classList.toggle('connection-status--connected', connected);
     statusEl.classList.toggle('connection-status--disconnected', !connected);
-    
-    if (text) {
-        statusEl.querySelector('.connection-status__text').textContent = text;
-    }
+    if (text) statusEl.querySelector('.connection-status__text').textContent = text;
 }
 
-/**
- * Set loading state on a button.
- */
 function setButtonLoading(button, loading) {
+    if (!button) return;
     button.classList.toggle('btn--loading', loading);
     button.disabled = loading;
 }
 
-/**
- * Format room code input as user types.
- */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 function formatRoomCode(input) {
-    // 5 character room code, uppercase alphanumeric only
     let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
     input.value = value.slice(0, 5);
+}
+
+// =============================================================================
+// Player Selection Functions
+// =============================================================================
+
+function renderPlayerList() {
+    const container = elements.playerList;
+    if (!container) return;
+    
+    if (state.players.length === 0) {
+        container.innerHTML = '<div class="player-list__empty">No player identities yet. Create one below!</div>';
+        return;
+    }
+    
+    container.innerHTML = state.players.map(player => `
+        <button class="player-card player-card--selectable" data-player-id="${player.id}">
+            <div class="player-card__avatar">🎭</div>
+            <div class="player-card__info">
+                <span class="player-card__name">${escapeHtml(player.username)}</span>
+                <span class="player-card__xp">${player.xp} XP</span>
+            </div>
+        </button>
+    `).join('');
+    
+    // Add click handlers
+    container.querySelectorAll('.player-card--selectable').forEach(card => {
+        card.addEventListener('click', () => selectPlayer(parseInt(card.dataset.playerId)));
+    });
+}
+
+async function loadPlayers() {
+    try {
+        const players = await client.getPlayersForUser();
+        state.players = players;
+        renderPlayerList();
+    } catch (error) {
+        console.error('Failed to load players:', error);
+    }
+}
+
+async function selectPlayer(playerId) {
+    const player = state.players.find(p => p.id === playerId);
+    if (!player) return;
+    
+    state.player = player;
+    localStorage.setItem(CONFIG.storage.playerId, playerId);
+    
+    if (elements.currentPlayer) {
+        elements.currentPlayer.textContent = `Playing as: ${player.username}`;
+    }
+    
+    showStep('room');
 }
 
 // =============================================================================
 // Lobby Functions
 // =============================================================================
 
-/**
- * Get the icon for a role.
- */
 function getRoleIcon(role) {
-    const icons = {
-        'Top': '👑',
-        'Bottom': '🌹',
-        'Observer': '👁',
-        'Photographer': '📸',
-        'ActivityAdmin': '⚙️',
-    };
+    const icons = { 'Top': '👑', 'Bottom': '🌹', 'Observer': '👁', 'Photographer': '📸', 'ActivityAdmin': '⚙️' };
     return icons[role] || '👤';
 }
 
-/**
- * Render the player list in the lobby.
- */
-function renderPlayerList() {
+function renderRoomMembers() {
     const container = elements.lobbyPlayers;
     if (!container) return;
     
@@ -191,303 +257,316 @@ function renderPlayerList() {
     
     container.innerHTML = state.roomMembers.map(member => {
         const isYou = member.playerId === state.player?.id;
-        const roleClass = `player-card__role--${member.role.toLowerCase()}`;
-        
         return `
             <div class="player-card ${isYou ? 'player-card--you' : ''}">
                 <div class="player-card__avatar">${getRoleIcon(member.role)}</div>
                 <div class="player-card__info">
                     <span class="player-card__name">${escapeHtml(member.username)}</span>
-                    <span class="player-card__role ${roleClass}">${member.role}</span>
+                    <span class="player-card__role">${member.role}</span>
                 </div>
             </div>
         `;
     }).join('');
 }
 
-/**
- * Add a player to the room (called when someone joins).
- */
-function addPlayerToRoom(playerId, username, role) {
-    // Check if already in list
-    const existing = state.roomMembers.find(m => m.playerId === playerId);
-    if (existing) return;
-    
-    state.roomMembers.push({ playerId, username, role });
-    renderPlayerList();
-}
-
-/**
- * Remove a player from the room (called when someone leaves).
- */
-function removePlayerFromRoom(playerId) {
-    state.roomMembers = state.roomMembers.filter(m => m.playerId !== playerId);
-    renderPlayerList();
-}
-
-/**
- * Show the lobby with the current room info.
- */
 function showLobby() {
-    // Set room code display
-    if (elements.lobbyRoomCode) {
-        elements.lobbyRoomCode.textContent = state.currentRoom?.code || '?????';
-    }
+    if (elements.lobbyRoomName) elements.lobbyRoomName.textContent = state.currentRoom?.name || 'Room';
+    if (elements.lobbyRoomCode) elements.lobbyRoomCode.textContent = state.currentRoom?.code || '?????';
     
-    // Render current players
-    renderPlayerList();
+    const isOwner = state.currentRoom?.ownerId === state.player?.id;
+    elements.ownerControls?.classList.toggle('hidden', !isOwner);
     
-    // Show lobby step
+    renderRoomMembers();
     showStep('lobby');
 }
 
-/**
- * Copy room code to clipboard.
- */
+// =============================================================================
+// Event Handlers
+// =============================================================================
+
+async function handleLogin(e) {
+    e.preventDefault();
+    const username = elements.usernameInput?.value.trim();
+    const password = elements.passwordInput?.value;
+    
+    if (!username || !password) {
+        showError(elements.loginError, 'Please enter username and password');
+        return;
+    }
+    
+    setButtonLoading(e.target.querySelector('[data-action="login"]'), true);
+    clearError(elements.loginError);
+    
+    try {
+        await client.loginUser(username, password);
+        state.user = { username };
+        localStorage.setItem(CONFIG.storage.username, username);
+        
+        if (elements.currentUser) elements.currentUser.textContent = `Welcome, ${username}`;
+        
+        await loadPlayers();
+        showStep('player');
+    } catch (error) {
+        showError(elements.loginError, error.message || 'Login failed');
+    } finally {
+        setButtonLoading(e.target.querySelector('[data-action="login"]'), false);
+    }
+}
+
+async function handleRegister() {
+    const username = elements.usernameInput?.value.trim();
+    const password = elements.passwordInput?.value;
+    
+    if (!username || !password) {
+        showError(elements.loginError, 'Please enter username and password');
+        return;
+    }
+    
+    if (password.length < 4) {
+        showError(elements.loginError, 'Password must be at least 4 characters');
+        return;
+    }
+    
+    setButtonLoading(elements.btnRegister, true);
+    clearError(elements.loginError);
+    
+    try {
+        await client.registerUser(username, password);
+        state.user = { username };
+        localStorage.setItem(CONFIG.storage.username, username);
+        
+        if (elements.currentUser) elements.currentUser.textContent = `Welcome, ${username}`;
+        
+        await loadPlayers();
+        showStep('player');
+    } catch (error) {
+        showError(elements.loginError, error.message || 'Registration failed');
+    } finally {
+        setButtonLoading(elements.btnRegister, false);
+    }
+}
+
+async function handleLogout() {
+    // Call backend to update last_seen and clear session
+    await client.logoutUser();
+    
+    // Clear all local state
+    state.user = null;
+    state.player = null;
+    state.players = [];
+    state.currentRoom = null;
+    state.currentRole = null;
+    state.roomMembers = [];
+    
+    localStorage.removeItem(CONFIG.storage.username);
+    localStorage.removeItem(CONFIG.storage.playerId);
+    
+    // Clear inputs
+    if (elements.usernameInput) elements.usernameInput.value = '';
+    if (elements.passwordInput) elements.passwordInput.value = '';
+    
+    showStep('login');
+}
+
+async function handleCreatePlayer(e) {
+    e.preventDefault();
+    const playerName = elements.playerNameInput?.value.trim();
+    
+    if (!playerName) {
+        showError(elements.playerError, 'Please enter a player name');
+        return;
+    }
+    
+    clearError(elements.playerError);
+    
+    try {
+        await client.createPlayer(playerName);
+        elements.playerNameInput.value = '';
+        await loadPlayers();
+    } catch (error) {
+        showError(elements.playerError, error.message || 'Failed to create player');
+    }
+}
+
+function handleCreateRoomClick() {
+    state.pendingAction = 'create';
+    showStep('create-room');
+}
+
+async function handleCreateRoom(e) {
+    e.preventDefault();
+    const roomName = elements.roomNameInput?.value.trim() || `${state.player.username}'s Room`;
+    
+    clearError(elements.createRoomError);
+    setButtonLoading(e.target.querySelector('.login-form__submit'), true);
+    
+    state.pendingRoomName = roomName;
+    showStep('role');
+    setButtonLoading(e.target.querySelector('.login-form__submit'), false);
+}
+
+async function handleJoinRoom(e) {
+    e.preventDefault();
+    const roomCode = elements.roomCodeInput?.value.trim().toUpperCase();
+    
+    if (!roomCode || roomCode.length !== 5) {
+        showError(elements.joinError, 'Please enter a 5-character room code');
+        return;
+    }
+    
+    clearError(elements.joinError);
+    state.pendingAction = 'join';
+    state.pendingRoomCode = roomCode;
+    showStep('role');
+}
+
+async function handleAcceptInvitation(e) {
+    e.preventDefault();
+    const token = elements.invitationTokenInput?.value.trim();
+    
+    if (!token) {
+        showError(elements.invitationError, 'Please enter an invitation token');
+        return;
+    }
+    
+    clearError(elements.invitationError);
+    state.pendingAction = 'invitation';
+    state.invitationToken = token;
+    showStep('role');
+}
+
+async function handleRoleSelect(e) {
+    const card = e.target.closest('.role-card');
+    if (!card) return;
+    
+    const role = card.dataset.role;
+    if (!role) return;
+    
+    clearError(elements.roleError);
+    setButtonLoading(card, true);
+    
+    try {
+        if (state.pendingAction === 'create') {
+            const result = await client.createRoom(state.player.id, state.pendingRoomName, role);
+            state.currentRoom = result.room;
+            state.currentRole = role;
+            state.roomMembers = result.members || [];
+        } else if (state.pendingAction === 'join') {
+            const result = await client.joinRoom(state.player.id, state.pendingRoomCode, role);
+            state.currentRoom = result.room;
+            state.currentRole = role;
+            state.roomMembers = result.members || [];
+        } else if (state.pendingAction === 'invitation') {
+            const result = await client.acceptInvitation(state.player.id, state.invitationToken, role);
+            state.currentRoom = result.room;
+            state.currentRole = role;
+            state.roomMembers = result.members || [];
+        }
+        
+        showLobby();
+    } catch (error) {
+        showError(elements.roleError, error.message || 'Failed to proceed');
+    } finally {
+        setButtonLoading(card, false);
+    }
+}
+
+async function handleLeaveRoom() {
+    if (!state.currentRoom || !state.player) return;
+    
+    try {
+        await client.leaveRoom(state.player.id);
+        state.currentRoom = null;
+        state.currentRole = null;
+        state.roomMembers = [];
+        showStep('room');
+    } catch (error) {
+        console.error('Failed to leave room:', error);
+    }
+}
+
+async function handleCreateInvitation() {
+    if (!state.currentRoom || !state.player) return;
+    
+    try {
+        await client.createRoomInvitation(state.player.id);
+        // The invitation will appear in the table; we need to query for it
+        // For now, show a success message
+        if (elements.inviteResult) {
+            elements.inviteResult.classList.remove('hidden');
+            if (elements.inviteTokenDisplay) {
+                elements.inviteTokenDisplay.value = 'Check room_invitation table';
+            }
+        }
+    } catch (error) {
+        alert('Failed to create invitation: ' + error.message);
+    }
+}
+
+async function handleCloseRoom() {
+    if (!state.currentRoom || !state.player) return;
+    if (!confirm('Close this room? All players will be removed.')) return;
+    
+    try {
+        await client.closeRoom(state.player.id);
+        state.currentRoom = null;
+        state.currentRole = null;
+        state.roomMembers = [];
+        showStep('room');
+    } catch (error) {
+        alert('Failed to close room: ' + error.message);
+    }
+}
+
 async function copyRoomCode() {
     const code = state.currentRoom?.code;
     if (!code) return;
-    
     try {
         await navigator.clipboard.writeText(code);
-        
-        // Visual feedback
-        const btn = elements.btnShareCode;
-        if (btn) {
-            const originalText = btn.textContent;
-            btn.textContent = '✓';
-            setTimeout(() => {
-                btn.textContent = originalText;
-            }, 1500);
-        }
+        elements.btnShareCode.textContent = '✓';
+        setTimeout(() => elements.btnShareCode.textContent = '📋', 1500);
     } catch (err) {
         console.error('Failed to copy:', err);
     }
 }
 
-/**
- * Leave the current room.
- */
-async function leaveRoom() {
-    console.log('Leaving room:', state.currentRoom?.code);
-    
-    // Call SpacetimeDB to leave the room
-    await client.leaveCurrentRoom();
-    
-    // Clear room state
-    state.currentRoom = null;
-    state.currentRole = null;
-    state.roomMembers = [];
-    
-    // Go back to room selection
-    showStep('room');
-}
-
-/**
- * Escape HTML to prevent XSS.
- */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// =============================================================================
-// SpacetimeDB Connection (Real HTTP Client)
-// =============================================================================
-
-/**
- * SpacetimeDB client wrapper.
- * Uses HTTP API for reducer calls and SQL queries.
- */
-class SpacetimeClient {
-    constructor() {
-        this.client = new SpacetimeDBClient(CONFIG.spacetimedb);
-        this.connected = false;
-        this.identity = null;
-        this.onConnect = null;
-        this.onDisconnect = null;
-        this.onError = null;
-    }
-    
-    /**
-     * Connect to SpacetimeDB.
-     */
-    async connect() {
-        console.log('Connecting to SpacetimeDB...');
-        
-        // Set up callbacks
-        this.client.onConnect = () => {
-            this.connected = true;
-            state.connected = true;
-            state.identity = this.client.identity;
-            if (this.onConnect) this.onConnect();
-        };
-        
-        this.client.onDisconnect = () => {
-            this.connected = false;
-            state.connected = false;
-            if (this.onDisconnect) this.onDisconnect();
-        };
-        
-        this.client.onError = (error) => {
-            if (this.onError) this.onError(error);
-        };
-        
-        // Set up room members update callback
-        this.client.onRoomMembersUpdate = (members) => {
-            state.roomMembers = members;
-            renderPlayerList();
-        };
-        
-        await this.client.connect();
-        
-        this.identity = this.client.identity;
-        console.log('Connected with identity:', this.identity);
-    }
-    
-    /**
-     * Register a new player (just stores username, actual registration happens with room creation).
-     */
-    async registerPlayer(username) {
-        console.log('Storing username for registration:', username);
-        
-        if (username.length < 2) {
-            throw new Error('Username must be at least 2 characters');
-        }
-        
-        // Just store the username - actual player creation happens in createRoom/joinRoom
-        // This avoids the identity mismatch issue between separate HTTP calls
-        state.player = {
-            id: null, // Will be set after room creation
-            username: username,
-            identity: null,
-            xp: 0,
-        };
-        
-        localStorage.setItem(CONFIG.storage.username, username);
-        
-        return state.player;
-    }
-    
-    /**
-     * Create a new room (sign in with room).
-     */
-    async createRoom(role) {
-        console.log('Creating room with role:', role);
-        
-        try {
-            const result = await this.client.signInWithRoom(state.player.username, role);
-            
-            // Update player info from server response
-            if (result.player) {
-                state.player = {
-                    id: result.player.id,
-                    username: result.player.username,
-                    identity: result.player.identity,
-                    xp: result.player.xp || 0,
-                };
-            }
-            
-            if (result.room) {
-                state.currentRoom = {
-                    id: result.room.id,
-                    code: result.room.code,
-                    ownerId: result.room.ownerId,
-                };
-            }
-            
-            state.currentRole = role;
-            state.roomMembers = result.members || [];
-            
-            // Start polling for real-time updates
-            if (state.currentRoom && state.player) {
-                this.client.startPolling(state.currentRoom.id, state.player.id);
-            }
-            
-            return state.currentRoom;
-        } catch (error) {
-            console.error('Room creation failed:', error);
-            throw new Error(error.message || 'Failed to create room');
-        }
-    }
-    
-    /**
-     * Join an existing room.
-     * Uses combined sign_in_and_join_room reducer to avoid CORS token issues.
-     */
-    async joinRoom(roomCode, role) {
-        console.log('Joining room:', roomCode, 'with role:', role);
-        
-        try {
-            // Use combined reducer that handles sign-in + join atomically
-            const result = await this.client.joinRoom(roomCode, role, state.player.username);
-            
-            // Update player info from server response
-            if (result.player) {
-                state.player = {
-                    id: result.player.id,
-                    username: result.player.username,
-                    identity: result.player.identity,
-                    xp: result.player.xp || 0,
-                };
-            }
-            
-            state.currentRoom = {
-                id: result.room.id,
-                code: result.room.code,
-                ownerId: result.room.ownerId,
-            };
-            
-            state.currentRole = role;
-            state.roomMembers = result.members || [];
-            
-            // Start polling for real-time updates
-            if (state.player) {
-                this.client.startPolling(state.currentRoom.id, state.player.id);
-            }
-            
-            return state.currentRoom;
-        } catch (error) {
-            console.error('Join room failed:', error);
-            throw new Error(error.message || 'Failed to join room');
-        }
-    }
-    
-    /**
-     * Leave the current room.
-     */
-    async leaveCurrentRoom() {
-        if (!state.currentRoom) return;
-        
-        try {
-            await this.client.leaveRoom(state.currentRoom.id);
-            this.client.stopPolling();
-        } catch (error) {
-            console.error('Leave room failed:', error);
-        }
+async function copyInvitation() {
+    const token = elements.inviteTokenDisplay?.value;
+    if (!token) return;
+    try {
+        await navigator.clipboard.writeText(token);
+        elements.btnCopyInvite.textContent = 'Copied!';
+        setTimeout(() => elements.btnCopyInvite.textContent = 'Copy', 1500);
+    } catch (err) {
+        console.error('Failed to copy:', err);
     }
 }
 
 // =============================================================================
-// Application Logic
+// Initialization
 // =============================================================================
 
-const client = new SpacetimeClient();
-
-/**
- * Initialize the application.
- */
 async function init() {
     updateConnectionStatus(false, 'Connecting...');
     
+    // Check for invitation in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const invitationToken = urlParams.get('invitation') || urlParams.get('invite') || urlParams.get('token');
+    if (invitationToken) {
+        state.invitationToken = invitationToken;
+        if (elements.invitationTokenInput) elements.invitationTokenInput.value = invitationToken;
+    }
+    
     try {
-        // Set up connection callbacks
+        // Connect to SpacetimeDB
         client.onConnect = () => {
+            state.connected = true;
+            state.identity = client.identity;
             updateConnectionStatus(true, 'Connected');
         };
         
         client.onDisconnect = () => {
+            state.connected = false;
             updateConnectionStatus(false, 'Disconnected');
         };
         
@@ -496,16 +575,15 @@ async function init() {
             updateConnectionStatus(false, 'Error');
         };
         
-        // Connect to SpacetimeDB
         await client.connect();
         
-        // Check for existing session
+        // Pre-fill username if stored
         const storedUsername = localStorage.getItem(CONFIG.storage.username);
-        if (storedUsername) {
+        if (storedUsername && elements.usernameInput) {
             elements.usernameInput.value = storedUsername;
         }
         
-        // Load dev admin module if in dev mode
+        // Load dev module if in dev mode
         if (CONFIG.isDev) {
             loadDevModule();
         }
@@ -515,177 +593,66 @@ async function init() {
         updateConnectionStatus(false, 'Connection failed');
     }
     
-    // Set up event listeners
     setupEventListeners();
 }
 
-/**
- * Dynamically load the dev admin module.
- */
-function loadDevModule() {
-    const script = document.createElement('script');
-    script.src = '/js/dev/admin.js';
-    script.type = 'module';
-    script.onerror = () => console.warn('Dev admin module not found (expected in production)');
-    document.head.appendChild(script);
-}
-
 function setupEventListeners() {
+    // Login
     elements.loginForm?.addEventListener('submit', handleLogin);
-    elements.btnCreateRoom?.addEventListener('click', handleCreateRoom);
-    elements.joinForm?.addEventListener('submit', handleJoinRoom);
+    elements.btnRegister?.addEventListener('click', handleRegister);
     
-    elements.roomCodeInput?.addEventListener('input', (e) => {
-        formatRoomCode(e.target);
-    });
+    // Player selection
+    elements.btnLogout?.addEventListener('click', handleLogout);
+    elements.playerForm?.addEventListener('submit', handleCreatePlayer);
+    
+    // Room selection
+    elements.btnBackPlayer?.addEventListener('click', () => showStep('player'));
+    elements.btnCreateRoom?.addEventListener('click', handleCreateRoomClick);
+    elements.joinForm?.addEventListener('submit', handleJoinRoom);
+    elements.invitationForm?.addEventListener('submit', handleAcceptInvitation);
+    elements.roomCodeInput?.addEventListener('input', (e) => formatRoomCode(e.target));
+    
+    // Room creation
+    elements.createRoomForm?.addEventListener('submit', handleCreateRoom);
+    elements.btnBackRoom?.addEventListener('click', () => showStep('room'));
     
     // Role selection
-    elements.roleCards.forEach(card => {
-        card.addEventListener('click', () => handleRoleSelect(card));
+    elements.roleCards?.forEach(card => {
+        card.addEventListener('click', handleRoleSelect);
     });
     
-    // Lobby actions
+    // Lobby
     elements.btnShareCode?.addEventListener('click', copyRoomCode);
-    elements.btnLeaveRoom?.addEventListener('click', leaveRoom);
+    elements.btnLeaveRoom?.addEventListener('click', handleLeaveRoom);
+    elements.btnLobbyLogout?.addEventListener('click', handleLogout);
+    elements.btnCreateInvite?.addEventListener('click', handleCreateInvitation);
+    elements.btnCopyInvite?.addEventListener('click', copyInvitation);
+    elements.btnCloseRoom?.addEventListener('click', handleCloseRoom);
 }
 
 /**
- * Handle login form submission.
+ * Load dev-only admin module.
  */
-async function handleLogin(e) {
-    e.preventDefault();
-    
-    const username = elements.usernameInput.value.trim();
-    const submitBtn = elements.loginForm.querySelector('.login-form__submit');
-    
-    clearError(elements.loginError);
-    setButtonLoading(submitBtn, true);
-    
+async function loadDevModule() {
     try {
-        await client.registerPlayer(username);
-        
-        // Update greeting
-        elements.playerGreeting.innerHTML = `
-            <span class="greeting__welcome">Welcome,</span>
-            <span class="greeting__name">${username}</span>
-        `;
-        
-        // Transition to room selection
-        showStep('room');
-        
-    } catch (error) {
-        showError(elements.loginError, error.message);
-    } finally {
-        setButtonLoading(submitBtn, false);
-    }
-}
-
-/**
- * Handle create room button click.
- */
-async function handleCreateRoom() {
-    setButtonLoading(elements.btnCreateRoom, true);
-    clearError(elements.joinError);
-    
-    try {
-        // Store pending room creation (role selected next)
-        state.pendingAction = 'create';
-        
-        // Show role selection
-        elements.currentRoomCode.textContent = 'New Room';
-        showStep('role');
-        
-    } catch (error) {
-        showError(elements.joinError, error.message);
-    } finally {
-        setButtonLoading(elements.btnCreateRoom, false);
-    }
-}
-
-/**
- * Handle join room form submission.
- */
-async function handleJoinRoom(e) {
-    e.preventDefault();
-    
-    const roomCode = elements.roomCodeInput.value.trim().toUpperCase();
-    const submitBtn = elements.joinForm.querySelector('.join-form__submit');
-    
-    clearError(elements.joinError);
-    
-    if (!roomCode || roomCode.length !== 5) {
-        showError(elements.joinError, 'Room code must be 5 characters');
-        return;
-    }
-    
-    setButtonLoading(submitBtn, true);
-    
-    try {
-        // Store pending room join (role selected next)
-        state.pendingAction = 'join';
-        state.pendingRoomCode = roomCode;
-        
-        // Show role selection
-        elements.currentRoomCode.textContent = roomCode;
-        showStep('role');
-        
-    } catch (error) {
-        showError(elements.joinError, error.message);
-    } finally {
-        setButtonLoading(submitBtn, false);
-    }
-}
-
-/**
- * Handle role card selection.
- */
-async function handleRoleSelect(card) {
-    const role = card.dataset.role;
-    
-    // Handle ActivityAdmin - delegate to dev module
-    if (role === 'ActivityAdmin') {
-        if (window.showAdminPanel) {
-            window.showAdminPanel();
+        const adminCard = document.getElementById('role-activity-admin');
+        if (adminCard) {
+            adminCard.style.display = 'flex';
+            adminCard.addEventListener('click', async (e) => {
+                e.preventDefault();
+                try {
+                    const module = await import('./admin.js');
+                    module.initAdmin(client, state);
+                    showStep('admin');
+                } catch (err) {
+                    console.error('Failed to load admin module:', err);
+                }
+            });
         }
-        return;
-    }
-    
-    // Visual feedback
-    elements.roleCards.forEach(c => c.classList.remove('role-card--selected'));
-    card.classList.add('role-card--selected');
-    card.classList.add('role-card--loading');
-    
-    clearError(elements.roleError);
-    
-    try {
-        if (state.pendingAction === 'create') {
-            // Create the room with selected role
-            await client.createRoom(role);
-            console.log('Room created:', state.currentRoom.code);
-            
-        } else if (state.pendingAction === 'join') {
-            // Join the room with selected role
-            await client.joinRoom(state.pendingRoomCode, role);
-            console.log('Joined room:', state.pendingRoomCode);
-        }
-        
-        // Clear pending action
-        state.pendingAction = null;
-        state.pendingRoomCode = null;
-        
-        // Remove loading state and show lobby
-        card.classList.remove('role-card--loading');
-        card.classList.remove('role-card--selected');
-        showLobby();
-        
     } catch (error) {
-        showError(elements.roleError, error.message);
-        card.classList.remove('role-card--loading');
+        console.log('Dev admin module not available');
     }
 }
 
-// =============================================================================
-// Start Application
-// =============================================================================
-
+// Start the app
 document.addEventListener('DOMContentLoaded', init);

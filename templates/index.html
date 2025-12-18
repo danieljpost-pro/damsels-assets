@@ -26,18 +26,95 @@
                     >
                 </div>
                 
+                <div class="login-form__field">
+                    <label for="password" class="login-form__label">Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        class="login-form__input"
+                        placeholder="Enter password..."
+                        required
+                        autocomplete="current-password"
+                        minlength="4"
+                    >
+                </div>
+                
                 <div class="login-form__error" id="login-error"></div>
                 
-                <button type="submit" class="login-form__submit">
-                    <span class="btn-text">Enter</span>
-                    <span class="btn-loading">Connecting...</span>
-                </button>
+                <div class="login-form__buttons">
+                    <button type="submit" class="login-form__submit" data-action="login">
+                        <span class="btn-text">Login</span>
+                        <span class="btn-loading">Authenticating...</span>
+                    </button>
+                    <button type="button" class="login-form__register" id="btn-register">
+                        <span class="btn-text">Register</span>
+                        <span class="btn-loading">Creating...</span>
+                    </button>
+                </div>
             </form>
         </section>
         
-        <!-- Step 2: Room Selection -->
+        <!-- Step 2: Player Selection -->
+        <section id="step-player" class="step">
+            <div class="player-header">
+                <span class="player-header__user" id="current-user"></span>
+                <button class="player-header__logout" id="btn-logout">Logout</button>
+            </div>
+            
+            <h2 class="step-title">Choose Your Identity</h2>
+            
+            <div class="player-list" id="player-list">
+                <!-- Player cards will be inserted here -->
+            </div>
+            
+            <div class="player-create">
+                <form class="player-form" id="player-form">
+                    <div class="player-form__field">
+                        <input 
+                            type="text" 
+                            id="player-name" 
+                            name="player-name" 
+                            class="login-form__input"
+                            placeholder="Create new player identity..."
+                            minlength="2"
+                            maxlength="24"
+                        >
+                        <button type="submit" class="player-form__submit">+ Create</button>
+                    </div>
+                    <div class="login-form__error" id="player-error"></div>
+                </form>
+            </div>
+        </section>
+        
+        <!-- Step 3: Room Selection -->
         <section id="step-room" class="step">
-            <div class="player-greeting" id="player-greeting"></div>
+            <div class="room-header">
+                <span class="room-header__player" id="current-player"></span>
+                <button class="room-header__back" id="btn-back-player">← Change Player</button>
+            </div>
+            
+            <!-- Accept Invitation Section -->
+            <div class="invitation-section hidden" id="invitation-section">
+                <form class="join-form" id="invitation-form">
+                    <div class="join-form__header">
+                        <span class="room-option__icon">✉️</span>
+                        <span class="room-option__title">Accept Invitation</span>
+                    </div>
+                    <div class="join-form__field">
+                        <input 
+                            type="text" 
+                            id="invitation-token" 
+                            name="invitation-token" 
+                            class="login-form__input join-form__input"
+                            placeholder="Enter invitation token..."
+                        >
+                        <button type="submit" class="join-form__submit">Join</button>
+                    </div>
+                    <div class="login-form__error" id="invitation-error"></div>
+                </form>
+                <div class="room-divider"><span>or</span></div>
+            </div>
             
             <div class="room-options">
                 <button class="room-option" id="btn-create-room">
@@ -72,7 +149,35 @@
             </div>
         </section>
         
-        <!-- Step 3: Role Selection -->
+        <!-- Step 3b: Room Creation (with name) -->
+        <section id="step-create-room" class="step">
+            <form class="login-form" id="create-room-form">
+                <h2 class="form-title">Create Your Room</h2>
+                <div class="login-form__field">
+                    <label for="room-name" class="login-form__label">Room Name</label>
+                    <input 
+                        type="text" 
+                        id="room-name" 
+                        name="room-name" 
+                        class="login-form__input"
+                        placeholder="My Session..."
+                        maxlength="50"
+                    >
+                </div>
+                
+                <div class="login-form__error" id="create-room-error"></div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="btn-back-room">← Back</button>
+                    <button type="submit" class="login-form__submit">
+                        <span class="btn-text">Continue</span>
+                        <span class="btn-loading">Creating...</span>
+                    </button>
+                </div>
+            </form>
+        </section>
+        
+        <!-- Step 4: Role Selection -->
         <section id="step-role" class="step">
             <div class="role-header">
                 <span class="role-header__room" id="current-room-code"></span>
@@ -118,26 +223,49 @@
             <div class="login-form__error" id="role-error"></div>
         </section>
         
-        <!-- Step 4: Room Lobby -->
+        <!-- Step 5: Room Lobby -->
         <section id="step-lobby" class="step">
             <div class="lobby">
                 <div class="lobby__header">
-                    <span class="lobby__code" id="lobby-room-code"></span>
+                    <div class="lobby__room-info">
+                        <span class="lobby__name" id="lobby-room-name"></span>
+                        <span class="lobby__code" id="lobby-room-code"></span>
+                    </div>
                     <button class="lobby__share" id="btn-share-code" title="Copy room code">
                         📋
                     </button>
                 </div>
                 
                 <div class="lobby__info">
-                    <span class="lobby__label">Waiting for players...</span>
+                    <span class="lobby__label">Players in Room</span>
                 </div>
                 
                 <div class="lobby__players" id="lobby-players">
                     <!-- Players will be inserted here -->
                 </div>
                 
+                <!-- Owner Controls (shown only to room owner) -->
+                <div class="lobby__owner-controls hidden" id="owner-controls">
+                    <h3 class="owner-controls__title">Room Owner Controls</h3>
+                    
+                    <div class="owner-controls__invite">
+                        <button class="owner-controls__btn" id="btn-create-invite">
+                            ✉️ Create Invitation
+                        </button>
+                        <div class="invite-result hidden" id="invite-result">
+                            <input type="text" class="invite-token" id="invite-token-display" readonly>
+                            <button class="btn-copy" id="btn-copy-invite">Copy</button>
+                        </div>
+                    </div>
+                    
+                    <button class="owner-controls__btn owner-controls__btn--danger" id="btn-close-room">
+                        🚪 Close Room
+                    </button>
+                </div>
+                
                 <div class="lobby__actions">
                     <button class="lobby__leave" id="btn-leave-room">Leave Room</button>
+                    <button class="lobby__logout" id="btn-lobby-logout">Logout</button>
                 </div>
             </div>
         </section>
