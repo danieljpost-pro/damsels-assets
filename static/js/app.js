@@ -860,7 +860,10 @@ function renderRoomMembers() {
                 <div class="player-card__avatar">${getRoleIcon(member.role)}</div>
                 <div class="player-card__info">
                     <span class="player-card__name">${escapeHtml(member.username)}</span>
-                    <span class="player-card__role">${member.role}</span>
+                    <span class="player-card__meta">
+                        <span class="player-card__role">${member.role}</span>
+                        <span class="player-card__xp">${member.xp || 0} XP</span>
+                    </span>
                 </div>
             </div>
         `;

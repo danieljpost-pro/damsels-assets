@@ -824,6 +824,13 @@ body.light-mode {
     color: $color-text;
 }
 
+.player-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
 .player-card__role {
     display: inline-block;
     font-size: 0.5625rem;
@@ -833,7 +840,6 @@ body.light-mode {
     padding: 0.125rem 0.375rem;
     background-color: $color-bg;
     border-radius: 2px;
-    margin-top: 0.25rem;
 }
 
 .player-card__role--top {
@@ -2336,10 +2342,11 @@ body.light-mode {
 }
 
 .player-card__xp {
-    display: block;
-    font-size: 0.625rem;
+    display: inline-block;
+    font-size: 0.5625rem;
     color: $color-accent;
     letter-spacing: 0.05em;
+    font-weight: 600;
 }
 
 .player-create {

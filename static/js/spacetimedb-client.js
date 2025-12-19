@@ -682,7 +682,15 @@ export class SpacetimeDBClient {
     }
     
     parseRole(roleValue) {
-        if (typeof roleValue === 'object') return Object.keys(roleValue)[0] || 'Observer';
+        // Handle array format [enum_index, {}] from SpacetimeDB
+        if (Array.isArray(roleValue)) {
+            const index = roleValue[0];
+            if (typeof index === 'number') {
+                return ['Top', 'Bottom', 'Observer', 'Photographer'][index] || 'Observer';
+            }
+            return 'Observer';
+        }
+        if (typeof roleValue === 'object' && roleValue !== null) return Object.keys(roleValue)[0] || 'Observer';
         if (typeof roleValue === 'number') return ['Top', 'Bottom', 'Observer', 'Photographer'][roleValue] || 'Observer';
         return roleValue || 'Observer';
     }
@@ -697,6 +705,7 @@ export class SpacetimeDBClient {
                 members.push({
                     playerId: member.playerId,
                     username: player.username,
+                    xp: player.xp,
                     role: member.role,
                     roomId: member.roomId,
                 });
