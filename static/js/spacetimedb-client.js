@@ -518,6 +518,11 @@ export class SpacetimeDBClient {
         // Helper to unwrap nested arrays and special SpacetimeDB types
         const unwrap = (val) => {
             if (val === null || val === undefined) return val;
+            // Unwrap SpacetimeDB Option format: [0, value] = Some(value), [1, {}] = None
+            if (Array.isArray(val) && val.length === 2 && typeof val[0] === 'number') {
+                if (val[0] === 0) return val[1];  // Some(value)
+                if (val[0] === 1) return null;     // None
+            }
             // Unwrap single-element arrays (e.g., timestamps, identities in array format)
             if (Array.isArray(val) && val.length === 1) return val[0];
             // Unwrap SpacetimeDB identity objects
@@ -667,17 +672,41 @@ export class SpacetimeDBClient {
     }
     
     parseKind(kindValue) {
-        if (typeof kindValue === 'object') return Object.keys(kindValue)[0] || 'Activity';
+        // Handle array format [enum_index, {}] from SpacetimeDB
+        if (Array.isArray(kindValue)) {
+            const index = kindValue[0];
+            if (typeof index === 'number') {
+                return ['Skill', 'Activity'][index] || 'Activity';
+            }
+            return 'Activity';
+        }
+        if (typeof kindValue === 'object' && kindValue !== null) return Object.keys(kindValue)[0] || 'Activity';
         return kindValue || 'Activity';
     }
     
     parseActivityStatus(statusValue) {
-        if (typeof statusValue === 'object') return Object.keys(statusValue)[0] || 'Available';
+        // Handle array format [enum_index, {}] from SpacetimeDB
+        if (Array.isArray(statusValue)) {
+            const index = statusValue[0];
+            if (typeof index === 'number') {
+                return ['Locked', 'Available', 'Completed'][index] || 'Available';
+            }
+            return 'Available';
+        }
+        if (typeof statusValue === 'object' && statusValue !== null) return Object.keys(statusValue)[0] || 'Available';
         return statusValue || 'Available';
     }
     
     parseRoomActivityStatus(statusValue) {
-        if (typeof statusValue === 'object') return Object.keys(statusValue)[0] || 'Viewing';
+        // Handle array format [enum_index, {}] from SpacetimeDB
+        if (Array.isArray(statusValue)) {
+            const index = statusValue[0];
+            if (typeof index === 'number') {
+                return ['Viewing', 'InProgress', 'Completed', 'Cancelled'][index] || 'Viewing';
+            }
+            return 'Viewing';
+        }
+        if (typeof statusValue === 'object' && statusValue !== null) return Object.keys(statusValue)[0] || 'Viewing';
         return statusValue || 'Viewing';
     }
     

@@ -188,14 +188,25 @@ const client = new SpacetimeDBClient(CONFIG.spacetimedb);
 function showStep(stepName) {
     state.currentStep = stepName;
     
-    elements.stepLogin?.classList.toggle('step--active', stepName === 'login');
-    elements.stepPlayer?.classList.toggle('step--active', stepName === 'player');
-    elements.stepRoom?.classList.toggle('step--active', stepName === 'room');
-    elements.stepCreateRoom?.classList.toggle('step--active', stepName === 'create-room');
-    elements.stepRole?.classList.toggle('step--active', stepName === 'role');
-    elements.stepLobby?.classList.toggle('step--active', stepName === 'lobby');
-    elements.stepActivity?.classList.toggle('step--active', stepName === 'activity');
-    elements.stepAdmin?.classList.toggle('step--active', stepName === 'admin');
+    // Remove hidden class and toggle step--active for each step
+    const steps = [
+        { el: elements.stepLogin, name: 'login' },
+        { el: elements.stepPlayer, name: 'player' },
+        { el: elements.stepRoom, name: 'room' },
+        { el: elements.stepCreateRoom, name: 'create-room' },
+        { el: elements.stepRole, name: 'role' },
+        { el: elements.stepLobby, name: 'lobby' },
+        { el: elements.stepActivity, name: 'activity' },
+        { el: elements.stepAdmin, name: 'admin' }
+    ];
+    
+    steps.forEach(({ el, name }) => {
+        if (el) {
+            const isActive = stepName === name;
+            el.classList.toggle('step--active', isActive);
+            if (isActive) el.classList.remove('hidden');
+        }
+    });
 }
 window.showStep = showStep;
 
@@ -504,9 +515,9 @@ function showActivityDetail(activity, roomActivity) {
     
     state.currentRoomActivity = roomActivity;
     
-    // Populate activity details
+    // Populate activity details - categoryName comes from roomActivity, not activity
     if (elements.activityCategory) {
-        elements.activityCategory.textContent = activity.categoryName || 'Unknown';
+        elements.activityCategory.textContent = roomActivity?.categoryName || activity.category || 'Unknown';
     }
     if (elements.activityKind) {
         elements.activityKind.textContent = activity.kind || 'Activity';
@@ -519,9 +530,14 @@ function showActivityDetail(activity, roomActivity) {
         elements.activityDescription.textContent = activity.description || 'No description available.';
     }
     
-    // Video embed
+    // Video embed - handle Option format [0, url] for Some, [1, {}] for None
     if (elements.activityVideoContainer) {
-        const videoEmbed = createVideoEmbed(activity.videoUrl);
+        let videoUrl = activity.videoUrl;
+        // Handle SpacetimeDB Option format
+        if (Array.isArray(videoUrl)) {
+            videoUrl = videoUrl[0] === 0 ? videoUrl[1] : null;
+        }
+        const videoEmbed = createVideoEmbed(videoUrl);
         if (videoEmbed) {
             elements.activityVideoContainer.innerHTML = videoEmbed;
             elements.activityVideoContainer.classList.remove('hidden');
