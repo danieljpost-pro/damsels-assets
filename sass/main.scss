@@ -2734,6 +2734,79 @@ body.light-mode {
 }
 
 // =============================================================================
+// QR Code Modal
+// =============================================================================
+
+.qr-modal {
+    max-width: 400px;
+    text-align: center;
+    
+    &__body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    &__code {
+        background: #fff;
+        padding: 1rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    &__canvas {
+        display: block;
+        border-radius: 8px;
+    }
+    
+    &__instructions {
+        color: $color-text-muted;
+        font-size: 0.9rem;
+        margin: 0;
+    }
+    
+    &__room-info {
+        margin-top: 0.5rem;
+    }
+    
+    &__room-id {
+        font-family: $font-display;
+        font-size: 1.1rem;
+        color: $color-accent;
+    }
+    
+    &__url-container {
+        display: flex;
+        gap: 0.5rem;
+        width: 100%;
+        max-width: 320px;
+    }
+    
+    &__url {
+        flex: 1;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid $color-border;
+        border-radius: 6px;
+        background: $color-bg;
+        color: $color-text;
+        font-family: $font-mono;
+        font-size: 0.75rem;
+        text-overflow: ellipsis;
+        
+        &:focus {
+            outline: none;
+            border-color: $color-accent;
+        }
+    }
+    
+    &__copy {
+        flex-shrink: 0;
+        font-size: 0.8rem;
+    }
+}
+
+// =============================================================================
 // Responsive
 // =============================================================================
 

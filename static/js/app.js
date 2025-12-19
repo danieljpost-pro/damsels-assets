@@ -138,7 +138,16 @@ const elements = {
     menuDropdown: document.getElementById('menu-dropdown'),
     menuPreferences: document.getElementById('menu-preferences'),
     menuReloadRoom: document.getElementById('menu-reload-room'),
+    menuShareRoom: document.getElementById('menu-share-room'),
     menuLogout: document.getElementById('menu-logout'),
+    
+    // QR Modal
+    qrModal: document.getElementById('qr-modal'),
+    qrModalClose: document.getElementById('qr-modal-close'),
+    qrCodeContainer: document.getElementById('qr-code-container'),
+    qrRoomId: document.getElementById('qr-room-id'),
+    qrRoomUrl: document.getElementById('qr-room-url'),
+    qrCopyUrl: document.getElementById('qr-copy-url'),
     themeToggle: document.getElementById('theme-toggle-checkbox'),
     
     // Preferences Modal
@@ -894,6 +903,7 @@ async function showLobby() {
     elements.ownerControls?.classList.toggle('hidden', !isOwner);
     
     renderRoomMembers();
+    updateShareRoomMenuVisibility();
     showStep('lobby');
     
     // Load room-compatible activities (intersection of all members' unlocked activities)
@@ -1019,6 +1029,7 @@ async function handleLogout() {
     
     // Update UI
     updatePreferencesMenuVisibility();
+    updateShareRoomMenuVisibility();
     updateConnectionStatus(false, 'Logged out');
     
     console.log('[App] Logout complete - WebSocket disconnected');
@@ -1173,6 +1184,7 @@ async function handleLeaveRoom() {
     state.currentRoom = null;
     state.currentRole = null;
     state.roomMembers = [];
+    updateShareRoomMenuVisibility();
     showStep('room');
 }
 
@@ -1521,11 +1533,25 @@ function setupEventListeners() {
         closeMenu();
         handleReloadRoom();
     });
+    elements.menuShareRoom?.addEventListener('click', () => {
+        closeMenu();
+        openQrModal();
+    });
     elements.menuLogout?.addEventListener('click', () => {
         closeMenu();
         handleLogout();
     });
     elements.themeToggle?.addEventListener('change', toggleTheme);
+    
+    // QR Modal
+    elements.qrModalClose?.addEventListener('click', closeQrModal);
+    elements.qrCopyUrl?.addEventListener('click', copyRoomUrl);
+    elements.qrModal?.addEventListener('click', (e) => {
+        // Close when clicking the overlay background (not the modal content)
+        if (e.target === elements.qrModal) {
+            closeQrModal();
+        }
+    });
     
     // Preferences Modal
     elements.preferencesClose?.addEventListener('click', closePreferencesModal);
@@ -1606,6 +1632,106 @@ function updatePreferencesMenuVisibility() {
         elements.menuPreferences.classList.add('hidden');
     }
 }
+
+/**
+ * Update the visibility of the share room menu item based on room state.
+ */
+function updateShareRoomMenuVisibility() {
+    if (!elements.menuShareRoom) return;
+    
+    // Show share room button only if player is in a room
+    if (state.currentRoom && state.player) {
+        elements.menuShareRoom.classList.remove('hidden');
+    } else {
+        elements.menuShareRoom.classList.add('hidden');
+    }
+}
+
+// =============================================================================
+// QR CODE MODAL
+// =============================================================================
+
+/**
+ * Generate QR code URL for room sharing.
+ */
+function getRoomShareUrl() {
+    if (!state.currentRoom) return null;
+    const baseUrl = window.location.origin;
+    // Use room code for sharing (more user-friendly than ID)
+    return `${baseUrl}/?join=${state.currentRoom.code || state.currentRoom.id}`;
+}
+
+/**
+ * Open the QR code modal for room sharing.
+ */
+function openQrModal() {
+    if (!elements.qrModal || !state.currentRoom) return;
+    
+    const shareUrl = getRoomShareUrl();
+    if (!shareUrl) return;
+    
+    // Display room info
+    if (elements.qrRoomId) {
+        elements.qrRoomId.textContent = `Room: ${state.currentRoom.name || state.currentRoom.code || state.currentRoom.id}`;
+    }
+    if (elements.qrRoomUrl) {
+        elements.qrRoomUrl.value = shareUrl;
+    }
+    
+    // Generate QR code using qrcodejs library
+    if (elements.qrCodeContainer && window.QRCode) {
+        elements.qrCodeContainer.innerHTML = '';
+        try {
+            new window.QRCode(elements.qrCodeContainer, {
+                text: shareUrl,
+                width: 200,
+                height: 200,
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: window.QRCode.CorrectLevel.M
+            });
+        } catch (err) {
+            console.error('[QR] Error generating QR code:', err);
+            elements.qrCodeContainer.innerHTML = '<p class="error">Failed to generate QR code</p>';
+        }
+    }
+    
+    elements.qrModal.classList.remove('hidden');
+}
+
+/**
+ * Close the QR code modal.
+ */
+function closeQrModal() {
+    if (elements.qrModal) {
+        elements.qrModal.classList.add('hidden');
+    }
+}
+
+/**
+ * Copy room URL to clipboard.
+ */
+async function copyRoomUrl() {
+    const url = elements.qrRoomUrl?.value;
+    if (!url) return;
+    
+    try {
+        await navigator.clipboard.writeText(url);
+        if (elements.qrCopyUrl) {
+            const originalText = elements.qrCopyUrl.textContent;
+            elements.qrCopyUrl.textContent = '✅ Copied!';
+            setTimeout(() => {
+                elements.qrCopyUrl.textContent = originalText;
+            }, 2000);
+        }
+    } catch (err) {
+        console.error('[QR] Failed to copy URL:', err);
+    }
+}
+
+// =============================================================================
+// PREFERENCES MODAL
+// =============================================================================
 
 /**
  * Open the preferences modal.
