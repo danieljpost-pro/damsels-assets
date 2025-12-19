@@ -29,6 +29,11 @@ export class SpacetimeDBClient {
             activity: new Map(),
             player_activity: new Map(),
             player_unlocked_activity: new Map(),
+            room_activity: new Map(),
+            activity_participant: new Map(),
+            player_not_wanted_activity: new Map(),
+            user_category_preference: new Map(),
+            player_category_preference: new Map(),
         };
         
         // Callbacks
@@ -38,6 +43,13 @@ export class SpacetimeDBClient {
         this.onRoomMembersUpdate = null;
         this.onActivitiesUpdate = null;
         this.onUnlockedActivitiesUpdate = null;
+        this.onRoomActivityUpdate = null;
+        this.onRoomAvailableActivitiesUpdate = null;  // Called when room-compatible activities change
+        this.onPreferencesUpdate = null;
+        this.onCategoriesLoaded = null;
+        
+        // Categories loading state - prioritized for early availability
+        this.categoriesLoaded = false;
         
         // Local storage keys
         this.storageKeys = {
@@ -61,6 +73,9 @@ export class SpacetimeDBClient {
     async connect() {
         console.log('[STDB] Connecting to:', this.wsUrl);
         
+        // Reset intentional disconnect flag when connecting
+        this.intentionalDisconnect = false;
+        
         this.identity = localStorage.getItem(this.storageKeys.identity);
         this.token = localStorage.getItem(this.storageKeys.token);
         
@@ -78,16 +93,30 @@ export class SpacetimeDBClient {
                     console.log('[STDB] WebSocket connected');
                     this.reconnectAttempts = 0;
                     
+                    // Phase 1: Subscribe to categories FIRST for early availability
+                    // Categories are needed immediately for the preferences UI
+                    console.log('[STDB] Phase 1: Subscribing to categories...');
+                    this.sendSubscription([
+                        "SELECT * FROM category",
+                    ]);
+                    
+                    // Phase 2: Subscribe to all other tables
+                    // These load in parallel but categories should arrive first
+                    console.log('[STDB] Phase 2: Subscribing to remaining tables...');
                     this.sendSubscription([
                         "SELECT * FROM user",
                         "SELECT * FROM player",
                         "SELECT * FROM room",
                         "SELECT * FROM room_member",
                         "SELECT * FROM room_invitation",
-                        "SELECT * FROM category",
                         "SELECT * FROM activity",
                         "SELECT * FROM player_activity",
                         "SELECT * FROM player_unlocked_activity",
+                        "SELECT * FROM room_activity",
+                        "SELECT * FROM activity_participant",
+                        "SELECT * FROM player_not_wanted_activity",
+                        "SELECT * FROM user_category_preference",
+                        "SELECT * FROM player_category_preference",
                     ]);
                     
                     if (this.onConnect) this.onConnect();
@@ -117,6 +146,12 @@ export class SpacetimeDBClient {
             return; // Already attempting reconnection
         }
         
+        // Don't reconnect if intentionally disconnected
+        if (this.intentionalDisconnect) {
+            console.log('[STDB] Skipping reconnect - intentional disconnect');
+            return;
+        }
+        
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.error('[STDB] Max reconnect attempts reached, giving up');
             this.isReconnecting = false;
@@ -131,8 +166,15 @@ export class SpacetimeDBClient {
         );
         console.log(`[STDB] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
         
-        setTimeout(() => {
+        this.reconnectTimeoutId = setTimeout(() => {
             this.isReconnecting = false; // Allow next attempt after timeout
+            
+            // Check again in case disconnect was called during timeout
+            if (this.intentionalDisconnect) {
+                console.log('[STDB] Reconnect cancelled - intentional disconnect');
+                return;
+            }
+            
             this.connect()
                 .then(() => {
                     // Don't reset attempts here - wait until identity token is received
@@ -146,12 +188,55 @@ export class SpacetimeDBClient {
         }, delay);
     }
     
+    /**
+     * Disconnect the WebSocket and stop all reconnection attempts.
+     * Call this when the user logs out.
+     */
     disconnect() {
+        console.log('[STDB] Disconnecting WebSocket...');
+        
+        // Mark as intentional disconnect to prevent auto-reconnect
+        this.intentionalDisconnect = true;
+        this.isReconnecting = false;
+        
+        // Clear any pending reconnection timeout
+        if (this.reconnectTimeoutId) {
+            clearTimeout(this.reconnectTimeoutId);
+            this.reconnectTimeoutId = null;
+        }
+        
+        // Close WebSocket
         if (this.ws) {
             this.ws.close();
             this.ws = null;
         }
+        
+        // Reset reconnection state
+        this.reconnectAttempts = 0;
+        
+        console.log('[STDB] Disconnected successfully');
         if (this.onDisconnect) this.onDisconnect();
+    }
+    
+    /**
+     * Check if WebSocket is connected and ready.
+     */
+    isConnected() {
+        return this.ws && this.ws.readyState === WebSocket.OPEN;
+    }
+    
+    /**
+     * Wait for WebSocket connection to be ready.
+     */
+    async waitForConnection(timeoutMs = 5000) {
+        if (this.isConnected()) return true;
+        
+        const startTime = Date.now();
+        while (Date.now() - startTime < timeoutMs) {
+            if (this.isConnected()) return true;
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        return false;
     }
     
     // =========================================================================
@@ -271,27 +356,133 @@ export class SpacetimeDBClient {
             return;
         }
         
-        console.log('[STDB] Applying update to', tableName, '- inserts:', tableUpdate.inserts?.length || 0, 'deletes:', tableUpdate.deletes?.length || 0);
+        // Handle both old format (inserts/deletes at top level) and new format (nested in updates array)
+        let inserts = tableUpdate.inserts || [];
+        let deletes = tableUpdate.deletes || [];
         
-        if (tableUpdate.inserts) {
-            for (const row of tableUpdate.inserts) {
-                const parsed = this.parseRow(tableName, row);
-                console.log('[STDB] Parsed row for', tableName, ':', parsed);
-                if (parsed?.id !== undefined) cache.set(parsed.id, parsed);
+        // New SpacetimeDB format: data is nested in updates[].inserts/deletes
+        if (tableUpdate.updates && Array.isArray(tableUpdate.updates)) {
+            for (const update of tableUpdate.updates) {
+                if (update.inserts) inserts = inserts.concat(update.inserts);
+                if (update.deletes) deletes = deletes.concat(update.deletes);
             }
         }
         
-        if (tableUpdate.deletes) {
-            for (const row of tableUpdate.deletes) {
-                const parsed = this.parseRow(tableName, row);
-                if (parsed?.id !== undefined) cache.delete(parsed.id);
+        console.log('[STDB] Applying update to', tableName, '- inserts:', inserts.length, 'deletes:', deletes.length);
+        
+        // Process deletes FIRST, then inserts (important for updates which are delete+insert pairs)
+        for (const row of deletes) {
+            const parsed = this.parseRow(tableName, row);
+            if (parsed?.id !== undefined) cache.delete(parsed.id);
+        }
+        
+        for (const row of inserts) {
+            const parsed = this.parseRow(tableName, row);
+            if (parsed?.id !== undefined) {
+                cache.set(parsed.id, parsed);
+            } else {
+                console.log('[STDB] Failed to parse row for', tableName, '- id is undefined, parsed:', parsed);
             }
         }
         
         // Trigger callbacks for specific tables
-        if (tableName === 'player_unlocked_activity' && this.onUnlockedActivitiesUpdate) {
-            this.notifyUnlockedActivitiesUpdate();
+        if (tableName === 'category') {
+            // Categories loaded - notify immediately for preferences UI
+            if (!this.categoriesLoaded && this.cache.category.size > 0) {
+                this.categoriesLoaded = true;
+                console.log(`[STDB] Categories loaded: ${this.cache.category.size} categories available`);
+                if (this.onCategoriesLoaded) {
+                    this.onCategoriesLoaded(Array.from(this.cache.category.values()));
+                }
+            }
         }
+        if (tableName === 'player_unlocked_activity') {
+            if (this.onUnlockedActivitiesUpdate) {
+                this.notifyUnlockedActivitiesUpdate();
+            }
+            // Also update room available activities
+            this.notifyRoomAvailableActivitiesUpdate();
+        }
+        if (tableName === 'player_not_wanted_activity') {
+            // Update room available activities when "not wanted" changes
+            this.notifyRoomAvailableActivitiesUpdate();
+        }
+        if ((tableName === 'room_activity' || tableName === 'activity_participant') && this.onRoomActivityUpdate) {
+            this.notifyRoomActivityUpdate();
+        }
+        if ((tableName === 'user_category_preference' || tableName === 'player_category_preference')) {
+            if (this.onPreferencesUpdate) {
+                this.notifyPreferencesUpdate();
+            }
+            // notifyPreferencesUpdate already updates room available activities
+        }
+    }
+    
+    /**
+     * Notify all rooms about their available activities.
+     */
+    notifyRoomAvailableActivitiesUpdate() {
+        if (!this.onRoomAvailableActivitiesUpdate) return;
+        
+        const roomIds = new Set();
+        for (const member of this.cache.room_member.values()) {
+            roomIds.add(member.roomId);
+        }
+        for (const roomId of roomIds) {
+            const activities = this.getRoomAvailableActivities(roomId);
+            this.onRoomAvailableActivitiesUpdate(roomId, activities);
+        }
+    }
+    
+    notifyPreferencesUpdate() {
+        // Get current user's preferences
+        const user = this.getCurrentUser();
+        const userPrefs = user ? this.getUserCategoryPreferences(user.id) : [];
+        
+        if (this.onPreferencesUpdate) {
+            this.onPreferencesUpdate({
+                userPreferences: userPrefs,
+                // Player preferences will be looked up by the app as needed
+            });
+        }
+        
+        // Also update room available activities since preferences affect them
+        this.notifyRoomAvailableActivitiesUpdate();
+    }
+    
+    notifyRoomActivityUpdate() {
+        if (!this.onRoomActivityUpdate) return;
+        
+        // Find active room activities (Viewing or InProgress)
+        const activeActivities = [];
+        for (const ra of this.cache.room_activity.values()) {
+            if (ra.status === 'Viewing' || ra.status === 'InProgress') {
+                // Get activity details
+                const activity = this.cache.activity.get(ra.activityId);
+                const category = activity ? this.cache.category.get(activity.categoryId) : null;
+                
+                // Get participants
+                const participants = [];
+                for (const ap of this.cache.activity_participant.values()) {
+                    if (ap.roomActivityId === ra.id) {
+                        const player = this.cache.player.get(ap.playerId);
+                        participants.push({
+                            ...ap,
+                            username: player?.username || 'Unknown',
+                        });
+                    }
+                }
+                
+                activeActivities.push({
+                    ...ra,
+                    activity,
+                    categoryName: category?.name || 'Unknown',
+                    participants,
+                });
+            }
+        }
+        
+        this.onRoomActivityUpdate(activeActivities);
     }
     
     notifyUnlockedActivitiesUpdate() {
@@ -314,39 +505,161 @@ export class SpacetimeDBClient {
     }
     
     parseRow(tableName, row) {
-        if (!Array.isArray(row)) return row;
+        // First, parse JSON string if needed (SpacetimeDB sends stringified data)
+        if (typeof row === 'string') {
+            try {
+                row = JSON.parse(row);
+            } catch (e) {
+                console.log('[STDB] Failed to parse row string:', e);
+                return null;
+            }
+        }
+        
+        // Helper to unwrap nested arrays and special SpacetimeDB types
+        const unwrap = (val) => {
+            if (val === null || val === undefined) return val;
+            // Unwrap single-element arrays (e.g., timestamps, identities in array format)
+            if (Array.isArray(val) && val.length === 1) return val[0];
+            // Unwrap SpacetimeDB identity objects
+            if (val && typeof val === 'object' && val.__identity__) return val.__identity__;
+            // Unwrap SpacetimeDB timestamp objects
+            if (val && typeof val === 'object' && val.__timestamp_micros_since_unix_epoch__ !== undefined) {
+                return val.__timestamp_micros_since_unix_epoch__;
+            }
+            return val;
+        };
+        
+        // Handle object format (from InitialSubscription) - convert snake_case to camelCase
+        if (row && typeof row === 'object' && !Array.isArray(row)) {
+            switch (tableName) {
+                case 'user':
+                    return { 
+                        id: row.id, 
+                        identity: unwrap(row.identity), 
+                        username: row.username, 
+                        passwordHash: row.password_hash, 
+                        role: row.role, 
+                        createdAt: unwrap(row.created_at), 
+                        lastSeen: unwrap(row.last_seen) 
+                    };
+                case 'player':
+                    return { id: row.id, userId: row.user_id, username: row.username, xp: row.xp, createdAt: unwrap(row.created_at) };
+                case 'room':
+                    return { id: row.id, code: row.code, name: row.name, ownerId: row.owner_id, isOpen: row.is_open, createdAt: unwrap(row.created_at) };
+                case 'room_member':
+                    return { id: row.id, roomId: row.room_id, playerId: row.player_id, role: this.parseRole(row.role), joinedAt: unwrap(row.joined_at) };
+                case 'room_invitation':
+                    return { id: row.id, roomId: row.room_id, token: row.token, createdBy: row.created_by, forUsername: row.for_username, status: row.status, createdAt: unwrap(row.created_at), acceptedBy: row.accepted_by };
+                case 'category':
+                    return { id: row.id, name: row.name, description: row.description, displayOrder: row.display_order };
+                case 'activity':
+                    return { id: row.id, categoryId: row.category_id, kind: this.parseKind(row.kind), name: row.name, description: row.description, instructions: row.instructions, videoUrl: unwrap(row.video_url), xpRequired: row.xp_required, xpReward: row.xp_reward };
+                case 'player_activity':
+                    return { id: row.id, playerId: row.player_id, activityId: row.activity_id, status: this.parseActivityStatus(row.status), completedAt: unwrap(row.completed_at), completedBy: row.completed_by, vouched: row.vouched, rating: row.rating };
+                case 'player_unlocked_activity':
+                    return { id: row.id, playerId: row.player_id, activityId: row.activity_id, activityName: row.activity_name, activityDescription: row.activity_description, categoryId: row.category_id, categoryName: row.category_name, kind: this.parseKind(row.kind), xpRequired: row.xp_required, xpReward: row.xp_reward, unlockedAt: unwrap(row.unlocked_at), isNew: row.is_new };
+                case 'room_activity':
+                    return { id: row.id, roomId: row.room_id, activityId: row.activity_id, status: this.parseRoomActivityStatus(row.status), startedBy: row.started_by, createdAt: unwrap(row.created_at), startedAt: unwrap(row.started_at), completedAt: unwrap(row.completed_at) };
+                case 'activity_participant':
+                    return { id: row.id, roomActivityId: row.room_activity_id, playerId: row.player_id, role: this.parseRole(row.role), xpEarned: row.xp_earned, completed: row.completed };
+                case 'player_not_wanted_activity':
+                    return { id: row.id, playerId: row.player_id, activityId: row.activity_id, createdAt: unwrap(row.created_at) };
+                case 'user_category_preference':
+                    return { id: row.id, userId: row.user_id, categoryId: row.category_id };
+                case 'player_category_preference':
+                    return { id: row.id, playerId: row.player_id, categoryId: row.category_id };
+                default:
+                    return row;
+            }
+        }
+        
+        // Handle array format (from TransactionUpdate) - convert array-like objects to real arrays
+        if (!Array.isArray(row)) {
+            if (row && typeof row === 'object' && row.length !== undefined) {
+                row = Array.from(row);
+            } else {
+                return row;
+            }
+        }
         
         switch (tableName) {
             case 'user':
-                return { id: row[0], identity: row[1], username: row[2], passwordHash: row[3], role: row[4], createdAt: row[5], lastSeen: row[6] };
+                return { 
+                    id: unwrap(row[0]), 
+                    identity: unwrap(row[1]),  // Identity comes as ["0x..."]
+                    username: unwrap(row[2]), 
+                    passwordHash: unwrap(row[3]), 
+                    role: row[4],  // Keep role as-is (enum format)
+                    createdAt: unwrap(row[5]),  // Timestamp comes as [number]
+                    lastSeen: unwrap(row[6]) 
+                };
             case 'player':
-                return { id: row[0], userId: row[1], username: row[2], xp: row[3], createdAt: row[4] };
+                return { id: unwrap(row[0]), userId: unwrap(row[1]), username: unwrap(row[2]), xp: unwrap(row[3]), createdAt: unwrap(row[4]) };
             case 'room':
-                return { id: row[0], code: row[1], name: row[2], ownerId: row[3], isOpen: row[4], createdAt: row[5] };
+                return { id: unwrap(row[0]), code: unwrap(row[1]), name: unwrap(row[2]), ownerId: unwrap(row[3]), isOpen: unwrap(row[4]), createdAt: unwrap(row[5]) };
             case 'room_member':
-                return { id: row[0], roomId: row[1], playerId: row[2], role: this.parseRole(row[3]), joinedAt: row[4] };
+                return { id: unwrap(row[0]), roomId: unwrap(row[1]), playerId: unwrap(row[2]), role: this.parseRole(row[3]), joinedAt: unwrap(row[4]) };
             case 'room_invitation':
-                return { id: row[0], roomId: row[1], token: row[2], createdBy: row[3], forUsername: row[4], status: row[5], createdAt: row[6], acceptedBy: row[7] };
+                return { id: unwrap(row[0]), roomId: unwrap(row[1]), token: unwrap(row[2]), createdBy: unwrap(row[3]), forUsername: unwrap(row[4]), status: row[5], createdAt: unwrap(row[6]), acceptedBy: unwrap(row[7]) };
             case 'category':
-                return { id: row[0], name: row[1], description: row[2], displayOrder: row[3] };
+                return { id: unwrap(row[0]), name: unwrap(row[1]), description: unwrap(row[2]), displayOrder: unwrap(row[3]) };
             case 'activity':
-                return { id: row[0], categoryId: row[1], kind: this.parseKind(row[2]), name: row[3], description: row[4], instructions: row[5], videoUrl: row[6], xpRequired: row[7], xpReward: row[8] };
+                return { id: unwrap(row[0]), categoryId: unwrap(row[1]), kind: this.parseKind(row[2]), name: unwrap(row[3]), description: unwrap(row[4]), instructions: unwrap(row[5]), videoUrl: unwrap(row[6]), xpRequired: unwrap(row[7]), xpReward: unwrap(row[8]) };
             case 'player_activity':
-                return { id: row[0], playerId: row[1], activityId: row[2], status: this.parseActivityStatus(row[3]), completedAt: row[4], completedBy: row[5], vouched: row[6] };
+                return { id: unwrap(row[0]), playerId: unwrap(row[1]), activityId: unwrap(row[2]), status: this.parseActivityStatus(row[3]), completedAt: unwrap(row[4]), completedBy: unwrap(row[5]), vouched: unwrap(row[6]), rating: unwrap(row[7]) };
             case 'player_unlocked_activity':
                 return { 
-                    id: row[0], 
-                    playerId: row[1], 
-                    activityId: row[2], 
-                    activityName: row[3], 
-                    activityDescription: row[4], 
-                    categoryId: row[5], 
-                    categoryName: row[6], 
+                    id: unwrap(row[0]), 
+                    playerId: unwrap(row[1]), 
+                    activityId: unwrap(row[2]), 
+                    activityName: unwrap(row[3]), 
+                    activityDescription: unwrap(row[4]), 
+                    categoryId: unwrap(row[5]), 
+                    categoryName: unwrap(row[6]), 
                     kind: this.parseKind(row[7]), 
-                    xpRequired: row[8], 
-                    xpReward: row[9], 
-                    unlockedAt: row[10], 
-                    isNew: row[11] 
+                    xpRequired: unwrap(row[8]), 
+                    xpReward: unwrap(row[9]), 
+                    unlockedAt: unwrap(row[10]), 
+                    isNew: unwrap(row[11]) 
+                };
+            case 'room_activity':
+                return {
+                    id: unwrap(row[0]),
+                    roomId: unwrap(row[1]),
+                    activityId: unwrap(row[2]),
+                    status: this.parseRoomActivityStatus(row[3]),
+                    startedBy: unwrap(row[4]),
+                    createdAt: unwrap(row[5]),
+                    startedAt: unwrap(row[6]),
+                    completedAt: unwrap(row[7]),
+                };
+            case 'activity_participant':
+                return {
+                    id: unwrap(row[0]),
+                    roomActivityId: unwrap(row[1]),
+                    playerId: unwrap(row[2]),
+                    role: this.parseRole(row[3]),
+                    xpEarned: unwrap(row[4]),
+                    completed: unwrap(row[5]),
+                };
+            case 'player_not_wanted_activity':
+                return {
+                    id: unwrap(row[0]),
+                    playerId: unwrap(row[1]),
+                    activityId: unwrap(row[2]),
+                    createdAt: unwrap(row[3]),
+                };
+            case 'user_category_preference':
+                return {
+                    id: unwrap(row[0]),
+                    userId: unwrap(row[1]),
+                    categoryId: unwrap(row[2]),
+                };
+            case 'player_category_preference':
+                return {
+                    id: unwrap(row[0]),
+                    playerId: unwrap(row[1]),
+                    categoryId: unwrap(row[2]),
                 };
             default:
                 return row;
@@ -363,6 +676,11 @@ export class SpacetimeDBClient {
         return statusValue || 'Available';
     }
     
+    parseRoomActivityStatus(statusValue) {
+        if (typeof statusValue === 'object') return Object.keys(statusValue)[0] || 'Viewing';
+        return statusValue || 'Viewing';
+    }
+    
     parseRole(roleValue) {
         if (typeof roleValue === 'object') return Object.keys(roleValue)[0] || 'Observer';
         if (typeof roleValue === 'number') return ['Top', 'Bottom', 'Observer', 'Photographer'][roleValue] || 'Observer';
@@ -370,9 +688,9 @@ export class SpacetimeDBClient {
     }
     
     notifyRoomMembersUpdate() {
-        if (!this.onRoomMembersUpdate) return;
-        
         const members = [];
+        const roomIds = new Set();
+        
         for (const member of this.cache.room_member.values()) {
             const player = this.cache.player.get(member.playerId);
             if (player) {
@@ -382,11 +700,23 @@ export class SpacetimeDBClient {
                     role: member.role,
                     roomId: member.roomId,
                 });
+                roomIds.add(member.roomId);
             }
         }
-        this.onRoomMembersUpdate(members);
         
-        // Also notify activities update
+        if (this.onRoomMembersUpdate) {
+            this.onRoomMembersUpdate(members);
+        }
+        
+        // Notify room available activities update for each room
+        if (this.onRoomAvailableActivitiesUpdate) {
+            for (const roomId of roomIds) {
+                const activities = this.getRoomAvailableActivities(roomId);
+                this.onRoomAvailableActivitiesUpdate(roomId, activities);
+            }
+        }
+        
+        // Also notify activities update (for debug panel)
         if (this.onActivitiesUpdate) {
             this.onActivitiesUpdate();
         }
@@ -445,6 +775,118 @@ export class SpacetimeDBClient {
                 xpReward: activity.xpReward,
             });
         }
+        return activities;
+    }
+    
+    /**
+     * Get activities available for ALL players in a room.
+     * This is the intersection of unlocked activities filtered by:
+     * - Category preferences (must be in ALL members' preferences)
+     * - Not wanted (excluded if ANY member marked it as not wanted)
+     * 
+     * @param {number} roomId - The room ID
+     * @returns {Array} Activities available to all room members
+     */
+    getRoomAvailableActivities(roomId) {
+        // Get all room members
+        const roomMembers = [];
+        for (const member of this.cache.room_member.values()) {
+            if (member.roomId === roomId) {
+                roomMembers.push(member);
+            }
+        }
+        
+        if (roomMembers.length === 0) {
+            console.log('[STDB] No room members found for room:', roomId);
+            return [];
+        }
+        
+        console.log('[STDB] Calculating room activities for', roomMembers.length, 'members');
+        
+        // Get category preferences for each member (intersection)
+        let allowedCategories = null;
+        for (const member of roomMembers) {
+            const memberCategories = new Set();
+            for (const pref of this.cache.player_category_preference.values()) {
+                if (pref.playerId === member.playerId) {
+                    memberCategories.add(pref.categoryId);
+                }
+            }
+            
+            if (allowedCategories === null) {
+                allowedCategories = memberCategories;
+            } else {
+                // Intersect: keep only categories that are in both sets
+                allowedCategories = new Set(
+                    [...allowedCategories].filter(catId => memberCategories.has(catId))
+                );
+            }
+        }
+        
+        console.log('[STDB] Allowed categories (intersection):', allowedCategories?.size || 0);
+        
+        // Get unlocked activities for each member (intersection)
+        let unlockedActivityIds = null;
+        for (const member of roomMembers) {
+            const memberUnlocked = new Set();
+            for (const ua of this.cache.player_unlocked_activity.values()) {
+                if (ua.playerId === member.playerId) {
+                    memberUnlocked.add(ua.activityId);
+                }
+            }
+            
+            if (unlockedActivityIds === null) {
+                unlockedActivityIds = memberUnlocked;
+            } else {
+                // Intersect: keep only activities unlocked by ALL members
+                unlockedActivityIds = new Set(
+                    [...unlockedActivityIds].filter(actId => memberUnlocked.has(actId))
+                );
+            }
+        }
+        
+        console.log('[STDB] Unlocked activities (intersection):', unlockedActivityIds?.size || 0);
+        
+        // Get "not wanted" activities for any member (union - exclude if ANY member doesn't want it)
+        const notWantedActivityIds = new Set();
+        for (const member of roomMembers) {
+            for (const nw of this.cache.player_not_wanted_activity.values()) {
+                if (nw.playerId === member.playerId) {
+                    notWantedActivityIds.add(nw.activityId);
+                }
+            }
+        }
+        
+        console.log('[STDB] Not wanted activities (union):', notWantedActivityIds.size);
+        
+        // Build the final list
+        const activities = [];
+        for (const activityId of (unlockedActivityIds || [])) {
+            // Skip if not wanted by any member
+            if (notWantedActivityIds.has(activityId)) continue;
+            
+            const activity = this.cache.activity.get(activityId);
+            if (!activity) continue;
+            
+            // Skip if category not in allowed categories
+            if (allowedCategories && !allowedCategories.has(activity.categoryId)) continue;
+            
+            const category = this.cache.category.get(activity.categoryId);
+            
+            activities.push({
+                id: activity.id,
+                name: activity.name,
+                description: activity.description,
+                instructions: activity.instructions,
+                kind: activity.kind,
+                category: category?.name || 'Unknown',
+                categoryId: activity.categoryId,
+                xpRequired: activity.xpRequired,
+                xpReward: activity.xpReward,
+            });
+        }
+        
+        console.log('[STDB] Room available activities:', activities.length);
         return activities;
     }
     
@@ -508,45 +950,37 @@ export class SpacetimeDBClient {
     }
     
     /**
-     * Query unlocked activities directly from the database (bypasses cache).
-     * Use this when the cache may not be populated yet.
+     * Get unlocked activities for a player from the subscription cache.
+     * The cache is populated via WebSocket subscriptions.
      */
-    async queryUnlockedActivities(playerId) {
-        try {
-            const query = `SELECT * FROM player_unlocked_activity WHERE player_id = ${playerId}`;
-            const response = await fetch(`${this.baseUrl}/sql`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain' },
-                body: query,
-            });
-            
-            if (!response.ok) {
-                console.error('[STDB] Failed to query unlocked activities');
-                return [];
+    getUnlockedActivitiesFromCache(playerId) {
+        const unlocked = [];
+        for (const activity of this.cache.player_unlocked_activity.values()) {
+            if (activity.playerId === playerId) {
+                unlocked.push(activity);
             }
-            
-            const data = await response.json();
-            const rows = data?.[0]?.rows || [];
-            
-            // Parse rows into activity objects
-            return rows.map(row => ({
-                id: row[0],
-                playerId: row[1],
-                activityId: row[2],
-                activityName: row[3],
-                activityDescription: row[4],
-                categoryId: row[5],
-                categoryName: row[6],
-                kind: Array.isArray(row[7]) ? (row[7][0] === 0 ? 'Skill' : 'Activity') : row[7],
-                xpRequired: row[8],
-                xpReward: row[9],
-                unlockedAt: row[10],
-                isNew: row[11],
-            }));
-        } catch (error) {
-            console.error('[STDB] Error querying unlocked activities:', error);
-            return [];
         }
+        return unlocked;
+    }
+    
+    /**
+     * Wait for cache to contain data matching a condition, with timeout.
+     * Returns true if condition was met, false on timeout.
+     */
+    async waitForCache(cacheKey, predicate, timeoutMs = 2000, intervalMs = 50) {
+        const startTime = Date.now();
+        while (Date.now() - startTime < timeoutMs) {
+            const cache = this.cache[cacheKey];
+            if (cache && cache.size > 0) {
+                for (const item of cache.values()) {
+                    if (predicate(item)) {
+                        return true;
+                    }
+                }
+            }
+            await new Promise(resolve => setTimeout(resolve, intervalMs));
+        }
+        return false;
     }
     
     // =========================================================================
@@ -591,32 +1025,93 @@ export class SpacetimeDBClient {
         return { ok: true, data: text ? JSON.parse(text) : null };
     }
     
-    async sql(query) {
-        const url = `${this.baseUrl}/sql`;
-        const headers = { 'Content-Type': 'text/plain' };
-        if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
-        if (this.identity) headers['spacetime-identity'] = this.identity;
-        
-        const response = await fetch(url, { method: 'POST', headers, body: query });
-        if (!response.ok) throw new Error(await response.text() || 'SQL query failed');
-        
-        const results = await response.json();
-        return this.parseQueryResults(results);
+    // =========================================================================
+    // Cache Lookup Helpers
+    // =========================================================================
+    
+    /**
+     * Get user from cache by identity.
+     */
+    getUserFromCache() {
+        if (!this.identity) return null;
+        const identityHex = this.identity.replace('0x', '').toLowerCase();
+        for (const user of this.cache.user.values()) {
+            // Compare identity - handle different formats
+            const userIdentityHex = (user.identity || '').replace('0x', '').toLowerCase();
+            if (userIdentityHex === identityHex) {
+                return user;
+            }
+        }
+        return null;
     }
     
-    parseQueryResults(results) {
-        if (!results?.length) return [];
-        const { schema, rows } = results[0];
-        return rows.map(row => {
-            const obj = {};
-            schema.elements.forEach((field, i) => {
-                const name = field.name.some || `field_${i}`;
-                let value = row[i];
-                if (Array.isArray(value) && value.length === 1) value = value[0];
-                obj[name.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = value;
-            });
-            return obj;
-        });
+    /**
+     * Get players for a user from cache.
+     */
+    getPlayersFromCache(userId) {
+        const players = [];
+        for (const player of this.cache.player.values()) {
+            if (player.userId === userId) {
+                players.push(player);
+            }
+        }
+        return players;
+    }
+    
+    /**
+     * Get room from cache by code.
+     */
+    getRoomFromCacheByCode(roomCode) {
+        for (const room of this.cache.room.values()) {
+            if (room.code === roomCode) {
+                return room;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Get room from cache by owner (most recent open room).
+     */
+    getRoomFromCacheByOwner(ownerId) {
+        for (const room of this.cache.room.values()) {
+            if (room.ownerId === ownerId && room.isOpen) {
+                return room;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Get room members from cache.
+     */
+    getRoomMembersFromCache(roomId) {
+        const members = [];
+        for (const member of this.cache.room_member.values()) {
+            if (member.roomId === roomId) {
+                // Get player info
+                const player = this.cache.player.get(member.playerId);
+                members.push({
+                    playerId: member.playerId,
+                    username: player?.username || 'Unknown',
+                    role: this.parseRole(member.role),
+                    roomId: member.roomId,
+                });
+            }
+        }
+        return members;
+    }
+    
+    /**
+     * Get invitation from cache by token.
+     */
+    getInvitationFromCacheByToken(token) {
+        for (const invitation of this.cache.room_invitation.values()) {
+            if (invitation.token === token) {
+                return invitation;
+            }
+        }
+        return null;
     }
     
     // =========================================================================
@@ -624,6 +1119,12 @@ export class SpacetimeDBClient {
     // =========================================================================
     
     async registerUser(username, password) {
+        // Ensure WebSocket is connected before registering
+        if (!this.isConnected()) {
+            console.log('[STDB] Reconnecting WebSocket for registration...');
+            await this.connect();
+        }
+        
         const result = await this.callReducer('register_user', [username, password]);
         if (!result.ok) return result;
         console.log('[STDB] User registered:', username);
@@ -631,6 +1132,12 @@ export class SpacetimeDBClient {
     }
     
     async loginUser(username, password) {
+        // Ensure WebSocket is connected before logging in
+        if (!this.isConnected()) {
+            console.log('[STDB] Reconnecting WebSocket for login...');
+            await this.connect();
+        }
+        
         const result = await this.callReducer('login_user', [username, password]);
         if (!result.ok) return result;
         console.log('[STDB] User logged in:', username);
@@ -655,6 +1162,10 @@ export class SpacetimeDBClient {
         for (const cache of Object.values(this.cache)) {
             cache.clear();
         }
+        
+        // Disconnect WebSocket and stop all polling/reconnection
+        this.disconnect();
+        
         return result;
     }
     
@@ -672,40 +1183,31 @@ export class SpacetimeDBClient {
             return [];
         }
         
-        try {
-            console.log('[STDB] Getting players for identity:', this.identity);
-            
-            // First get the current user by identity - try different formats
-            let identityHex = this.identity.replace('0x', '');
-            let query = `SELECT id, username FROM user WHERE identity = X'${identityHex}'`;
-            console.log('[STDB] User query:', query);
-            
-            let users = await this.sql(query);
-            console.log('[STDB] Users found:', users);
-            
-            if (users.length === 0) {
-                // Try querying all users to debug
-                const allUsers = await this.sql('SELECT id, username, identity FROM user');
-                console.log('[STDB] All users in DB:', allUsers);
-                return [];
-            }
-            
-            const userId = users[0].id;
-            
-            // Get all players for this user
-            const players = await this.sql(`SELECT id, user_id, username, xp, created_at FROM player WHERE user_id = ${userId}`);
-            console.log('[STDB] Players found:', players);
-            
-            // Update cache with these players
-            for (const player of players) {
-                this.cache.player.set(player.id, player);
-            }
-            
-            return players;
-        } catch (error) {
-            console.error('[STDB] Failed to get players:', error);
+        console.log('[STDB] Getting players for identity from cache:', this.identity);
+        
+        // Wait for user cache to be populated (subscription may still be loading)
+        const identityHex = this.identity.replace('0x', '').toLowerCase();
+        await this.waitForCache('user', u => {
+            const userIdentityHex = (u.identity || '').replace('0x', '').toLowerCase();
+            return userIdentityHex === identityHex;
+        }, 3000);
+        
+        // Get user from cache
+        const user = this.getUserFromCache();
+        if (!user) {
+            console.log('[STDB] User not found in cache after waiting');
+            // Debug: log all users in cache
+            console.log('[STDB] Users in cache:', Array.from(this.cache.user.values()));
             return [];
         }
+        
+        console.log('[STDB] Found user in cache:', user);
+        
+        // Get players for this user from cache
+        const players = this.getPlayersFromCache(user.id);
+        console.log('[STDB] Players found in cache:', players);
+        
+        return players;
     }
     
     // =========================================================================
@@ -716,12 +1218,14 @@ export class SpacetimeDBClient {
         const result = await this.callReducer('create_room', [playerId, roomName || '', { [role]: {} }]);
         if (!result.ok) return result;
         
-        // Query API for the room we just created
-        const rooms = await this.sql(`SELECT id, code, name, owner_id, is_open, created_at FROM room WHERE owner_id = ${playerId} AND is_open = true`);
-        const room = rooms.length > 0 ? rooms[0] : null;
-        console.log('[STDB] Created room:', room);
+        // Wait for room to appear in cache (subscription update)
+        await this.waitForCache('room', r => r.ownerId === playerId && r.isOpen, 2000);
         
-        const members = room ? await this.queryRoomMembers(room.id) : [];
+        // Get room from cache
+        const room = this.getRoomFromCacheByOwner(playerId);
+        console.log('[STDB] Created room (from cache):', room);
+        
+        const members = room ? this.getRoomMembersFromCache(room.id) : [];
         return { ok: true, room, members };
     }
     
@@ -729,12 +1233,14 @@ export class SpacetimeDBClient {
         const result = await this.callReducer('join_room', [playerId, roomCode, { [role]: {} }]);
         if (!result.ok) return result;
         
-        // Query API for the room we just joined
-        const rooms = await this.sql(`SELECT id, code, name, owner_id, is_open, created_at FROM room WHERE code = '${roomCode}'`);
-        const room = rooms.length > 0 ? rooms[0] : null;
-        console.log('[STDB] Joined room:', room);
+        // Wait for room_member to appear in cache (subscription update)
+        await this.waitForCache('room_member', m => m.playerId === playerId, 2000);
         
-        const members = room ? await this.queryRoomMembers(room.id) : [];
+        // Get room from cache
+        const room = this.getRoomFromCacheByCode(roomCode);
+        console.log('[STDB] Joined room (from cache):', room);
+        
+        const members = room ? this.getRoomMembersFromCache(room.id) : [];
         return { ok: true, room, members };
     }
     
@@ -742,34 +1248,44 @@ export class SpacetimeDBClient {
         const result = await this.callReducer('accept_invitation', [playerId, invitationToken, { [role]: {} }]);
         if (!result.ok) return result;
         
-        // Query API for the invitation to get room_id
-        const invitations = await this.sql(`SELECT room_id FROM room_invitation WHERE token = '${invitationToken}'`);
-        if (invitations.length === 0) {
+        // Wait for room_member to appear in cache (subscription update)
+        await this.waitForCache('room_member', m => m.playerId === playerId, 2000);
+        
+        // Get invitation from cache to find room_id
+        const invitation = this.getInvitationFromCacheByToken(invitationToken);
+        if (!invitation) {
+            console.log('[STDB] Invitation not found in cache');
             return { ok: true, room: null, members: [] };
         }
         
-        const roomId = invitations[0].roomId;
-        const rooms = await this.sql(`SELECT id, code, name, owner_id, is_open, created_at FROM room WHERE id = ${roomId}`);
-        const room = rooms.length > 0 ? rooms[0] : null;
-        console.log('[STDB] Accepted invitation, room:', room);
+        const room = this.cache.room.get(invitation.roomId);
+        console.log('[STDB] Accepted invitation, room (from cache):', room);
         
-        const members = room ? await this.queryRoomMembers(room.id) : [];
+        const members = room ? this.getRoomMembersFromCache(room.id) : [];
         return { ok: true, room, members };
     }
     
-    async queryRoomMembers(roomId) {
-        const members = await this.sql(`
-            SELECT rm.id, rm.room_id, rm.player_id, rm.role, rm.joined_at, p.username 
-            FROM room_member rm 
-            JOIN player p ON rm.player_id = p.id 
-            WHERE rm.room_id = ${roomId}
-        `);
-        return members.map(m => ({
-            playerId: m.playerId,
-            username: m.username,
-            role: this.parseRole(m.role),
-            roomId: m.roomId,
-        }));
+    /**
+     * Get room members from cache.
+     * @deprecated Use getRoomMembersFromCache() directly
+     */
+    queryRoomMembers(roomId) {
+        return this.getRoomMembersFromCache(roomId);
+    }
+    
+    /**
+     * Get a room by its code along with its members from cache.
+     * Useful for reloading a room the player is already in.
+     */
+    getRoomByCode(roomCode) {
+        const room = this.getRoomFromCacheByCode(roomCode);
+        
+        if (!room) {
+            return { room: null, members: [] };
+        }
+        
+        const members = this.getRoomMembersFromCache(room.id);
+        return { room, members };
     }
     
     async leaveRoom(playerId, roomId) {
@@ -791,5 +1307,334 @@ export class SpacetimeDBClient {
     async getRoomMembers(roomId) {
         // Use API query instead of cache
         return this.queryRoomMembers(roomId);
+    }
+    
+    // =========================================================================
+    // Room Activity Methods
+    // =========================================================================
+    
+    /**
+     * Select an activity to view in detail.
+     */
+    async selectRoomActivity(playerId, roomId, activityId) {
+        return await this.callReducer('select_room_activity', [playerId, roomId, activityId]);
+    }
+    
+    /**
+     * Randomly select an activity (weighted by ratings).
+     */
+    async randomRoomActivity(playerId, roomId) {
+        return await this.callReducer('random_room_activity', [playerId, roomId]);
+    }
+    
+    /**
+     * Start the currently viewed activity.
+     */
+    async startRoomActivity(playerId, roomId) {
+        return await this.callReducer('start_room_activity', [playerId, roomId]);
+    }
+    
+    /**
+     * Complete the current room activity (awards XP to all participants).
+     */
+    async completeRoomActivity(playerId, roomId) {
+        return await this.callReducer('complete_room_activity', [playerId, roomId]);
+    }
+    
+    /**
+     * Cancel the current room activity (deletes all records).
+     */
+    async cancelRoomActivity(playerId, roomId) {
+        return await this.callReducer('cancel_room_activity', [playerId, roomId]);
+    }
+    
+    /**
+     * Rate a completed activity (1-5 stars).
+     */
+    async rateActivity(playerId, activityId, rating) {
+        return await this.callReducer('rate_activity', [playerId, activityId, rating]);
+    }
+    
+    /**
+     * Get the current room activity for a specific room from cache.
+     */
+    getRoomActivity(roomId) {
+        for (const ra of this.cache.room_activity.values()) {
+            if (ra.roomId === roomId && (ra.status === 'Viewing' || ra.status === 'InProgress')) {
+                const activity = this.cache.activity.get(ra.activityId);
+                const category = activity ? this.cache.category.get(activity.categoryId) : null;
+                
+                const participants = [];
+                for (const ap of this.cache.activity_participant.values()) {
+                    if (ap.roomActivityId === ra.id) {
+                        const player = this.cache.player.get(ap.playerId);
+                        participants.push({
+                            ...ap,
+                            username: player?.username || 'Unknown',
+                        });
+                    }
+                }
+                
+                return {
+                    ...ra,
+                    activity,
+                    categoryName: category?.name || 'Unknown',
+                    participants,
+                };
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Get activity details by ID from cache.
+     */
+    getActivity(activityId) {
+        const activity = this.cache.activity.get(activityId);
+        if (!activity) return null;
+        
+        const category = this.cache.category.get(activity.categoryId);
+        return {
+            ...activity,
+            categoryName: category?.name || 'Unknown',
+        };
+    }
+    
+    // =========================================================================
+    // Not Wanted Activity Methods
+    // =========================================================================
+    
+    /**
+     * Mark an activity as "not wanted" by the player.
+     * Activities marked by any room member won't appear in that room.
+     */
+    async markActivityNotWanted(playerId, activityId) {
+        return await this.callReducer('mark_activity_not_wanted', [playerId, activityId]);
+    }
+    
+    /**
+     * Remove an activity from the player's "not wanted" list.
+     */
+    async unmarkActivityNotWanted(playerId, activityId) {
+        return await this.callReducer('unmark_activity_not_wanted', [playerId, activityId]);
+    }
+    
+    /**
+     * Get all activities marked as "not wanted" by a player from cache.
+     */
+    getNotWantedActivities(playerId) {
+        const notWanted = [];
+        for (const nw of this.cache.player_not_wanted_activity.values()) {
+            if (nw.playerId === playerId) {
+                const activity = this.cache.activity.get(nw.activityId);
+                const category = activity ? this.cache.category.get(activity.categoryId) : null;
+                notWanted.push({
+                    ...nw,
+                    activity,
+                    categoryName: category?.name || 'Unknown',
+                });
+            }
+        }
+        return notWanted;
+    }
+    
+    /**
+     * Check if a specific activity is in the player's not-wanted list.
+     */
+    isActivityNotWanted(playerId, activityId) {
+        for (const nw of this.cache.player_not_wanted_activity.values()) {
+            if (nw.playerId === playerId && nw.activityId === activityId) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    // =========================================================================
+    // Category Preferences
+    // =========================================================================
+    
+    /**
+     * Initialize user preferences with default categories (ID < 100).
+     * Called automatically when opening preferences dialog.
+     */
+    async initUserPreferences() {
+        return await this.callReducer('init_user_preferences', []);
+    }
+    
+    /**
+     * Add a category to user preferences.
+     */
+    async addUserCategoryPreference(categoryId) {
+        return await this.callReducer('add_user_category_preference', [categoryId]);
+    }
+    
+    /**
+     * Remove a category from user preferences.
+     */
+    async removeUserCategoryPreference(categoryId) {
+        return await this.callReducer('remove_user_category_preference', [categoryId]);
+    }
+    
+    /**
+     * Set all user category preferences at once.
+     */
+    async setUserCategoryPreferences(categoryIds) {
+        return await this.callReducer('set_user_category_preferences', [categoryIds]);
+    }
+    
+    /**
+     * Add a category to player preferences.
+     */
+    async addPlayerCategoryPreference(playerId, categoryId) {
+        return await this.callReducer('add_player_category_preference', [playerId, categoryId]);
+    }
+    
+    /**
+     * Remove a category from player preferences.
+     */
+    async removePlayerCategoryPreference(playerId, categoryId) {
+        return await this.callReducer('remove_player_category_preference', [playerId, categoryId]);
+    }
+    
+    /**
+     * Set all player category preferences at once.
+     */
+    async setPlayerCategoryPreferences(playerId, categoryIds) {
+        return await this.callReducer('set_player_category_preferences', [playerId, categoryIds]);
+    }
+    
+    /**
+     * Get all categories from cache.
+     * 
+     * Categories are loaded via WebSocket subscription immediately on connect
+     * (before other tables). If categories aren't loaded yet, waits for them.
+     * 
+     * Use `onCategoriesLoaded` callback for proactive notification.
+     */
+    async getAllCategories() {
+        // If categories are already loaded, return immediately
+        if (this.categoriesLoaded && this.cache.category.size > 0) {
+            return Array.from(this.cache.category.values())
+                .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+        }
+        
+        // First, ensure we're connected
+        if (!this.isConnected()) {
+            console.log('[STDB] Not connected, waiting for connection...');
+            const connected = await this.waitForConnection(5000);
+            if (!connected) {
+                console.error('[STDB] Failed to connect - cannot load categories');
+                return [];
+            }
+        }
+        
+        // Wait for categories to load (max 5 seconds)
+        console.log('[STDB] Waiting for categories to load from subscription...');
+        const maxWait = 5000;
+        const checkInterval = 100;
+        let waited = 0;
+        
+        while (waited < maxWait && this.cache.category.size === 0) {
+            await new Promise(resolve => setTimeout(resolve, checkInterval));
+            waited += checkInterval;
+        }
+        
+        if (this.cache.category.size === 0) {
+            console.error('[STDB] Categories not loaded after waiting - subscription may have failed');
+            console.log('[STDB] Connection state:', this.ws?.readyState, 'Cache size:', this.cache.category.size);
+        } else {
+            this.categoriesLoaded = true;
+            console.log(`[STDB] Categories ready: ${this.cache.category.size}`);
+        }
+        
+        return Array.from(this.cache.category.values())
+            .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+    }
+    
+    /**
+     * Check if categories are already loaded.
+     */
+    areCategoriesLoaded() {
+        return this.categoriesLoaded && this.cache.category.size > 0;
+    }
+    
+    /**
+     * Get user's selected category IDs from cache.
+     * Returns IDs of categories the user has selected.
+     */
+    getUserCategoryPreferences(userId) {
+        const prefs = [];
+        for (const pref of this.cache.user_category_preference.values()) {
+            if (pref.userId === userId) {
+                prefs.push(pref.categoryId);
+            }
+        }
+        return prefs;
+    }
+    
+    /**
+     * Get player's selected category IDs from cache.
+     * Returns IDs of categories the player has selected.
+     */
+    getPlayerCategoryPreferences(playerId) {
+        const prefs = [];
+        for (const pref of this.cache.player_category_preference.values()) {
+            if (pref.playerId === playerId) {
+                prefs.push(pref.categoryId);
+            }
+        }
+        return prefs;
+    }
+    
+    /**
+     * Get the current user from cache.
+     */
+    getCurrentUser() {
+        if (!this.identity) return null;
+        for (const user of this.cache.user.values()) {
+            // Identity matching - the identity stored is the hex string
+            if (user.identity === this.identity) {
+                return user;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Check if a category is selected for a user.
+     */
+    isUserCategorySelected(userId, categoryId) {
+        for (const pref of this.cache.user_category_preference.values()) {
+            if (pref.userId === userId && pref.categoryId === categoryId) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Check if a category is selected for a player.
+     */
+    isPlayerCategorySelected(playerId, categoryId) {
+        for (const pref of this.cache.player_category_preference.values()) {
+            if (pref.playerId === playerId && pref.categoryId === categoryId) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Get default category IDs (those with ID < 100).
+     */
+    getDefaultCategoryIds() {
+        const defaults = [];
+        for (const cat of this.cache.category.values()) {
+            if (cat.id < 100) {
+                defaults.push(cat.id);
+            }
+        }
+        return defaults;
     }
 }

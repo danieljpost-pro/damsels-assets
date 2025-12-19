@@ -29,9 +29,42 @@ The application guides users through a multi-step authentication and room-joinin
 │                              │                                 │           │
 │                              │  • See room members             │           │
 │                              │  • View available activities    │           │
+│                              │  • "Choose For Me" (dice roll)  │           │
 │                              │  • Owner controls (invitations) │           │
 │                              │  • Leave room / Logout          │           │
+│                              └────────────────┬────────────────┘           │
+│                                               │                             │
+│                                               ▼                             │
+│                              ┌─────────────────────────────────┐           │
+│                              │           Step 6                │           │
+│                              │     ACTIVITY DETAIL VIEW        │           │
+│                              │                                 │           │
+│                              │  • Full activity description    │           │
+│                              │  • Video embed (YouTube/Vimeo)  │           │
+│                              │  • Instructions panel           │           │
+│                              │  • "Do This Activity" / "Back"  │           │
+│                              │  • Participant list (in progress)│          │
+│                              │  • Completion & rating UI       │           │
 │                              └─────────────────────────────────┘           │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                      HAMBURGER MENU                                  │   │
+│  │  ⚙️ Activity Preferences  (opens modal)                             │   │
+│  │  🔄 Reload Room                                                      │   │
+│  │  🚪 Log Out                                                          │   │
+│  │  🌙 Dark Mode Toggle                                                 │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                    PREFERENCES MODAL                                 │   │
+│  │  ─────────────────────────────────────────────────────────────────  │   │
+│  │  Displays all activity categories with checkboxes                   │   │
+│  │  • Categories with ID ≥ 100 highlighted (adult content)            │   │
+│  │  • Auto-saves on checkbox change                                    │   │
+│  │  • "Select All" / "Select None" buttons                            │   │
+│  │  • User preferences when logged in as user                          │   │
+│  │  • Player preferences when logged in as player                      │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -65,9 +98,49 @@ The application guides users through a multi-step authentication and room-joinin
 #### Step 5: Room Lobby (`#step-lobby`)
 - Displays room name and shareable code
 - Shows all current room members with their roles
-- **Available Activities**: Lists activities unlocked for the player
+- **Room Available Activities**: Shows the **intersection** of activities available to ALL room members
+  - Only activities unlocked by ALL members are shown
+  - Only categories in ALL members' preferences are included
+  - Activities marked "not wanted" by ANY member are excluded
+  - Updates automatically when members join/leave or change preferences
+- **"Choose For Me" Button**: Random weighted activity selection (dice roll animation)
 - **Owner Controls**: Create invitations, close room
 - **New Activities Toast**: Notifies when new activities are unlocked
+
+#### Hamburger Menu
+Available in the top-right corner on all screens:
+- **Activity Preferences**: Opens modal to select which activity categories to show
+  - When logged in as User: "Activity Preferences" (edits User preferences)
+  - When logged in as Player: "Preferences for {Player Name}" (edits Player preferences)
+- **Reload Room**: Refresh room member list
+- **Log Out**: Clear session and return to login
+- **Dark Mode Toggle**: Switch between dark and light themes
+
+#### Preferences Modal
+- Displays all activity categories as checkboxes
+- Categories with ID ≥ 100 are highlighted (adult-oriented content)
+- Changes auto-save immediately when clicking checkboxes
+- **Select All / Select None** buttons for quick selection
+- User preferences act as templates for new Players
+- Player preferences filter which activities are available in rooms
+
+#### Step 6: Activity Detail View (`#step-activity`)
+- **Full Activity Display**: Title, category, kind (Skill/Activity), description
+- **Video Embedding**: Supports YouTube, Vimeo, and direct video URLs
+- **Instructions Panel**: Step-by-step activity instructions
+- **XP Reward Display**: Shows potential XP earned
+- **Viewing State Actions**:
+  - ✨ **Do This Activity**: Start the activity for all room members
+  - ← **Go Back**: Return to lobby (cancels the viewing state)
+  - 🚫 **Don't show me this activity again**: Mark as not wanted (hides from all rooms)
+- **In Progress State**:
+  - Shows all participants with their roles
+  - ✅ **Completed This Activity**: Awards XP to all participants
+  - ✕ **Cancel**: Cancels without saving any record
+- **Completion State**:
+  - Celebration animation and XP earned display
+  - ⭐ **Rating Stars**: 1-5 star rating (influences future "Choose For Me" selections)
+  - ← **Back to Lobby**: Returns to activity list
 
 ## Architecture
 
@@ -147,8 +220,81 @@ Manages the entire UI flow with:
 Handles all backend communication:
 - **WebSocket Connection**: Subscribes to tables for real-time updates
 - **HTTP Reducer Calls**: Invokes backend functions (login, create_room, etc.)
-- **Client Cache**: Maps for `user`, `player`, `room`, `room_member`, `activity`, etc.
+- **Client Cache**: Maps for `user`, `player`, `room`, `room_member`, `activity`, `room_activity`, `activity_participant`, etc.
 - **Identity Management**: Stores/retrieves identity token from localStorage
+
+#### Room Activity Methods
+```javascript
+// Select a specific activity to view
+await client.selectRoomActivity(playerId, roomId, activityId);
+
+// Random weighted selection (based on ratings)
+await client.randomRoomActivity(playerId, roomId);
+
+// Start the currently viewed activity
+await client.startRoomActivity(playerId, roomId);
+
+// Complete and award XP to all participants
+await client.completeRoomActivity(playerId, roomId);
+
+// Cancel without saving any record
+await client.cancelRoomActivity(playerId, roomId);
+
+// Rate a completed activity (1-5 stars)
+await client.rateActivity(playerId, activityId, rating);
+
+// Mark activity as "not wanted"
+await client.markActivityNotWanted(playerId, activityId);
+
+// Remove from not-wanted list
+await client.unmarkActivityNotWanted(playerId, activityId);
+
+// Get all not-wanted activities for a player
+const notWanted = client.getNotWantedActivities(playerId);
+
+// Get activities available to ALL room members (intersection)
+const roomActivities = client.getRoomAvailableActivities(roomId);
+```
+
+#### Room Available Activities Callback
+```javascript
+// Called when room membership, preferences, or unlocked activities change
+client.onRoomAvailableActivitiesUpdate = (roomId, activities) => {
+    console.log(`Room ${roomId} has ${activities.length} available activities`);
+    // activities = intersection of all members' unlocked activities
+    // filtered by category preferences and "not wanted" lists
+};
+```
+
+#### Category Preference Methods
+```javascript
+// Initialize user preferences with defaults (categories ID < 100)
+await client.initUserPreferences();
+
+// Add/remove user category preference
+await client.addUserCategoryPreference(categoryId);
+await client.removeUserCategoryPreference(categoryId);
+
+// Bulk set all user preferences
+await client.setUserCategoryPreferences([1, 2, 5, 11, 12]);
+
+// Add/remove player category preference
+await client.addPlayerCategoryPreference(playerId, categoryId);
+await client.removePlayerCategoryPreference(playerId, categoryId);
+
+// Bulk set all player preferences
+await client.setPlayerCategoryPreferences(playerId, [1, 2, 5]);
+
+// Get all categories sorted by display order
+const categories = client.getAllCategories();
+
+// Get user/player selected category IDs
+const userPrefs = client.getUserCategoryPreferences(userId);
+const playerPrefs = client.getPlayerCategoryPreferences(playerId);
+
+// Get default category IDs (ID < 100)
+const defaults = client.getDefaultCategoryIds();
+```
 
 ### Theming
 
@@ -202,6 +348,12 @@ When `dev_mode = true` in `config.toml`:
 4. UI updates reactively as subscription data arrives
 5. User actions trigger HTTP reducer calls, which update the database
 6. WebSocket pushes changes back to all subscribed clients
+
+## Future Features
+
+- [ ] Display of activities the Player marked as Not Wanted, with ability to remove items from the list
+- [ ] Activity ratings display on activity cards
+- [ ] Aggregate activity ratings visible to help Players choose
 
 ## Related Layers
 

@@ -19,6 +19,12 @@
                 <span class="theme-toggle__label">Dark Mode</span>
             </label>
         </div>
+        <button class="hamburger-menu__item hidden" id="menu-preferences">
+            ⚙️ Activity Preferences
+        </button>
+        <button class="hamburger-menu__item hidden" id="menu-reload-room">
+            🔄 Reload Room
+        </button>
         <button class="hamburger-menu__item hamburger-menu__logout" id="menu-logout">
             🚪 Log Out
         </button>
@@ -273,6 +279,12 @@
                         <span class="lobby__count" id="activities-count">0</span>
                     </div>
                     
+                    <!-- Choose For Me Button -->
+                    <button class="btn-dice-roll" id="btn-choose-for-me">
+                        <span class="btn-dice-roll__icon">🎲</span>
+                        <span class="btn-dice-roll__text">Choose For Me</span>
+                    </button>
+                    
                     <!-- New Activities Toast -->
                     <div class="new-activities-toast hidden" id="new-activities-toast">
                         <span class="new-activities-toast__icon">✨</span>
@@ -306,7 +318,6 @@
                 
                 <div class="lobby__actions">
                     <button class="lobby__leave" id="btn-leave-room">Leave Room</button>
-                    <button class="lobby__logout" id="btn-lobby-logout">Logout</button>
                 </div>
                 
                 {# DEV ONLY: Available Activities Debug Panel #}
@@ -320,6 +331,95 @@
                     </details>
                 </div>
                 {% endif %}
+            </div>
+        </section>
+        
+        <!-- Step: Activity Detail View -->
+        <section id="step-activity" class="step step-activity hidden">
+            <div class="activity-detail">
+                <div class="activity-detail__header">
+                    <span class="activity-detail__category" id="activity-category">Category</span>
+                    <span class="activity-detail__kind" id="activity-kind">Activity</span>
+                </div>
+                
+                <h1 class="activity-detail__title" id="activity-title">Activity Name</h1>
+                
+                <div class="activity-detail__description" id="activity-description">
+                    Activity description will appear here.
+                </div>
+                
+                <div class="activity-detail__video hidden" id="activity-video-container">
+                    <!-- Video embed or player will be inserted here -->
+                </div>
+                
+                <div class="activity-detail__instructions hidden" id="activity-instructions-container">
+                    <h3 class="activity-detail__section-title">Instructions</h3>
+                    <div class="activity-detail__instructions-text" id="activity-instructions">
+                        Instructions will appear here.
+                    </div>
+                </div>
+                
+                <div class="activity-detail__xp">
+                    <span class="activity-detail__xp-reward" id="activity-xp-reward">
+                        <span class="xp-icon">⭐</span>
+                        <span class="xp-value">+0 XP</span>
+                    </span>
+                </div>
+                
+                <!-- Viewing state: before activity is started -->
+                <div class="activity-detail__actions" id="activity-actions-viewing">
+                    <button class="activity-detail__btn activity-detail__btn--primary" id="btn-start-activity">
+                        ✨ Do This Activity
+                    </button>
+                    <button class="activity-detail__btn activity-detail__btn--secondary" id="btn-go-back">
+                        ← Go Back
+                    </button>
+                    <button class="activity-detail__btn activity-detail__btn--not-wanted" id="btn-not-wanted">
+                        🚫 Don't show me this activity again
+                    </button>
+                </div>
+                
+                <!-- In Progress state: activity is being performed -->
+                <div class="activity-detail__actions hidden" id="activity-actions-progress">
+                    <div class="activity-detail__progress-indicator">
+                        <span class="progress-icon">🔥</span>
+                        <span class="progress-text">Activity in progress...</span>
+                    </div>
+                    <div class="activity-detail__participants" id="activity-participants">
+                        <!-- Participant list will be inserted here -->
+                    </div>
+                    <button class="activity-detail__btn activity-detail__btn--success" id="btn-complete-activity">
+                        ✅ Completed This Activity
+                    </button>
+                    <button class="activity-detail__btn activity-detail__btn--danger" id="btn-cancel-activity">
+                        ✕ Cancel
+                    </button>
+                </div>
+                
+                <!-- Completion state: rating UI -->
+                <div class="activity-detail__completion hidden" id="activity-completion">
+                    <div class="activity-detail__celebration">
+                        <span class="celebration-icon">🎉</span>
+                        <span class="celebration-text">Activity Completed!</span>
+                    </div>
+                    <div class="activity-detail__xp-earned" id="activity-xp-earned">
+                        <span class="xp-earned-icon">⭐</span>
+                        <span class="xp-earned-value">+0 XP earned!</span>
+                    </div>
+                    <div class="activity-detail__rating">
+                        <span class="rating-label">Rate this activity:</span>
+                        <div class="rating-stars" id="rating-stars">
+                            <button class="rating-star" data-rating="1">★</button>
+                            <button class="rating-star" data-rating="2">★</button>
+                            <button class="rating-star" data-rating="3">★</button>
+                            <button class="rating-star" data-rating="4">★</button>
+                            <button class="rating-star" data-rating="5">★</button>
+                        </div>
+                    </div>
+                    <button class="activity-detail__btn activity-detail__btn--primary" id="btn-back-to-lobby">
+                        ← Back to Lobby
+                    </button>
+                </div>
             </div>
         </section>
         
@@ -465,6 +565,31 @@
         </div>
     </div>
 </main>
+
+<!-- Preferences Modal -->
+<div class="modal-overlay hidden" id="preferences-modal">
+    <div class="modal preferences-modal">
+        <div class="modal__header">
+            <h2 class="modal__title" id="preferences-title">Activity Preferences</h2>
+            <button class="modal__close" id="preferences-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal__body">
+            <p class="preferences-modal__subtitle">Select the categories you're interested in:</p>
+            <div class="preferences-modal__categories" id="preferences-categories">
+                <!-- Category checkboxes will be inserted here -->
+            </div>
+            <div class="preferences-modal__info">
+                <p>🔒 Categories with ID ≥ 100 may contain adult-oriented content.</p>
+                <p>✨ Changes are saved automatically.</p>
+            </div>
+        </div>
+        <div class="modal__footer">
+            <button class="btn btn--secondary" id="preferences-select-all">Select All</button>
+            <button class="btn btn--secondary" id="preferences-select-none">Select None</button>
+            <button class="btn btn--primary" id="preferences-done">Done</button>
+        </div>
+    </div>
+</div>
 
 <script type="module" src="{{ get_url(path='js/app.js') }}"></script>
 {% endblock %}
